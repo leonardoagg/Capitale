@@ -3,7 +3,7 @@ import { formatCivilDate, todayCivilDate } from "../domain/date.js";
 import { formatEuro, parseEuroToCents } from "../domain/money.js";
 import { assertPosition } from "../domain/validation.js";
 import { assertMovement } from "../domain/validation.js";
-import { calculateWealthSummary } from "../domain/wealth.js";
+import { calculateWealthHistory, calculateWealthSummary } from "../domain/wealth.js";
 import { calculateMonthlySummary } from "../domain/movements.js";
 import { createBackup, restoreBackup, validateBackup } from "../backup/backup.js";
 import { decryptBackup, encryptBackup } from "../backup/crypto.js";
@@ -14,9 +14,9 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], settings: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], snapshotItems: [], movements: [], categories: [], settings: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
-  state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories, state.settings] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories), database.getAll(STORE.settings)]); render(); };
+  state.refreshPositions = async () => { [state.positions, state.snapshots, state.snapshotItems, state.movements, state.categories, state.settings] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.snapshotItems), database.getAll(STORE.movements), database.getAll(STORE.categories), database.getAll(STORE.settings)]); render(); };
   state.initialize = async () => { state.pinRecord = await database.get(STORE.security, "pin"); state.locked = Boolean(state.pinRecord); state.ready = true; await state.refreshPositions(); };
   document.addEventListener("visibilitychange", () => { if (document.hidden && state.pinRecord) { state.locked = true; render(); } });
   render(); state.initialize().catch((error) => renderFatalError(root, error));
@@ -57,7 +57,7 @@ function createHeader(state, render) {
 
 function createContent(state, render) {
   const main = element("main", "screen");
-  const views = { home: () => homeView(state, render), wealth: () => wealthView(state, render), movements: () => movementsView(state, render), analysis: analysisView, settings: () => settingsView(state, render) };
+  const views = { home: () => homeView(state, render), wealth: () => wealthView(state, render), movements: () => movementsView(state, render), analysis: () => analysisView(state), settings: () => settingsView(state, render) };
   main.append(views[state.current]());
   return main;
 }
@@ -189,7 +189,7 @@ function movementForm(state, render, editing = null) {
   form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const now = new Date().toISOString(); const movement = { id: editing?.id ?? createId(), kind: kind.input.value, amountCents: parseEuroToCents(amount.input.value), categoryId: category.input.value, date: date.input.value, description: description.input.value.trim() || undefined, createdAt: editing?.createdAt ?? now, updatedAt: now }; if (movement.kind === "expense") movement.expenseType = expenseType.input.value; assertMovement(movement); await state.database.put(STORE.movements, movement); state.editingMovementId = null; state.addingMovement = false; form.reset(); date.input.value = todayCivilDate(); updateCategories(); await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare il movimento."; submit.disabled = false; } });
   return form;
 }
-function analysisView() { return pendingView("Analisi", "I grafici appariranno qui quando saranno disponibili rilevazioni patrimoniali o movimenti registrati.", "Nessun grafico o andamento viene inventato in assenza di dati."); }
+function analysisView(state) { const section = element("section", "settings-list"); const history = calculateWealthHistory(state.snapshots, state.snapshotItems); section.append(element("h1", "page-title", "Analisi"), element("p", "subtitle", "Andamento basato sulle fotografie disponibili.")); if (!history.length) { section.append(element("p", "empty-copy", "Nessuna fotografia patrimoniale disponibile.")); return section; } const card = element("section", "chart-card"); card.append(element("h2", "setting-title", "Andamento patrimonio")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 320 150"); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Andamento del patrimonio"); const values = history.map((point) => point.totalCents); const minimum = Math.min(...values); const maximum = Math.max(...values); const span = maximum - minimum || 1; const points = history.map((point, index) => `${20 + index * (280 / Math.max(1, history.length - 1))},${125 - ((point.totalCents - minimum) / span) * 95}`).join(" "); const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline"); line.setAttribute("points", points); line.setAttribute("fill", "none"); line.setAttribute("stroke", "#69D6A5"); line.setAttribute("stroke-width", "4"); line.setAttribute("stroke-linecap", "round"); svg.append(line); card.append(svg, element("p", "metric-detail", state.amountsHidden ? "Importi nascosti" : `Da ${formatEuro(history[0].totalCents)} a ${formatEuro(history.at(-1).totalCents)}`)); section.append(card); return section; }
 
 function pendingView(title, copy, note) {
   const state = element("section", "empty-state");
