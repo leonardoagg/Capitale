@@ -10,7 +10,7 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories)]); render(); };
   render();
@@ -143,15 +143,19 @@ function movementsView(state, render) {
   fragment.append(element("h1", "page-title", "Movimenti mensili"), monthSelector(state, render), element("p", "subtitle", "Totali registrati del mese selezionato."));
   const totals = element("section", "movement-totals section-card");
   totals.append(metricCard("Entrate", hidden(state, formatEuro(summary.incomeCents)), ""), metricCard("Uscite", hidden(state, formatEuro(summary.expenseCents)), ""), metricCard("Bilancio", hidden(state, formatEuro(summary.balanceCents)), ""));
-  fragment.append(totals, movementForm(state, render));
+  fragment.append(totals);
   const list = element("section", "position-list"); list.append(element("h2", "setting-title", "Registrati questo mese"));
   if (!summary.movements.length) list.append(element("p", "empty-copy", "Nessun movimento registrato."));
   for (const movement of [...summary.movements].sort((left, right) => right.date.localeCompare(left.date))) {
     const row = element("article", "position-row"); const copy = element("div"); const category = state.categories.find((item) => item.id === movement.categoryId);
     copy.append(element("strong", "position-name", category?.name ?? "Categoria archiviata"), element("p", "metric-detail", movement.date));
-    row.append(copy, element("strong", `position-value ${movement.kind === "expense" ? "negative" : "positive"}`, `${movement.kind === "expense" ? "−" : "+"}${hidden(state, formatEuro(movement.amountCents))}`)); list.append(row);
+    const actions = element("div", "position-actions");
+    const edit = button("✎", `Modifica movimento ${category?.name ?? ""}`, "text-button"); edit.addEventListener("click", () => { state.editingMovementId = movement.id; render(); });
+    const remove = button("⌫", `Cancella movimento ${category?.name ?? ""}`, "text-button danger-button"); remove.addEventListener("click", async () => { if (!window.confirm("Cancellare definitivamente questo movimento?")) return; await state.database.delete(STORE.movements, movement.id); if (state.editingMovementId === movement.id) state.editingMovementId = null; await state.refreshPositions(); });
+    actions.append(element("strong", `position-value ${movement.kind === "expense" ? "negative" : "positive"}`, `${movement.kind === "expense" ? "−" : "+"}${hidden(state, formatEuro(movement.amountCents))}`), edit, remove); row.append(copy, actions); list.append(row);
+    if (state.editingMovementId === movement.id) list.append(movementForm(state, render, movement));
   }
-  fragment.append(list); return fragment;
+  fragment.append(list, movementForm(state, render, null)); return fragment;
 }
 
 function monthSelector(state, render) {
@@ -159,14 +163,17 @@ function monthSelector(state, render) {
   previous.addEventListener("click", () => { state.selectedMonth = shiftMonth(state.selectedMonth, -1); render(); }); next.addEventListener("click", () => { state.selectedMonth = shiftMonth(state.selectedMonth, 1); render(); }); selector.append(previous, label, next); return selector;
 }
 
-function movementForm(state, render) {
-  const form = element("form", "position-form"); form.append(element("h2", "setting-title", "Nuovo movimento"));
+function movementForm(state, render, editing = null) {
+  const form = element("form", "position-form"); form.append(element("h2", "setting-title", editing ? "Modifica movimento" : "Nuovo movimento"));
   const kind = selectField("Tipo", "kind", [["expense", "Uscita"], ["income", "Entrata"]]); const expenseType = selectField("Tipologia di spesa", "expenseType", [["fixed", "Fissa"], ["variable", "Variabile"], ["extraordinary", "Straordinaria"]]); const category = selectField("Categoria", "category", []);
   const amount = inputField("Importo (€)", "amount", "text", "0,00"); amount.input.inputMode = "decimal"; const date = inputField("Data", "date", "date", ""); date.input.value = todayCivilDate(); const description = inputField("Descrizione (facoltativa)", "description", "text", ""); description.input.required = false;
-  const error = element("p", "form-error"); error.setAttribute("role", "alert"); const submit = button("Salva movimento", "Salva movimento", "primary-button"); submit.type = "submit";
+  const error = element("p", "form-error"); error.setAttribute("role", "alert"); const submit = button(editing ? "Salva modifiche" : "Salva movimento", editing ? "Salva modifiche" : "Salva movimento", "primary-button"); submit.type = "submit";
   const updateCategories = () => { const isExpense = kind.input.value === "expense"; expenseType.wrapper.hidden = !isExpense; expenseType.input.required = isExpense; category.input.replaceChildren(); const available = state.categories.filter((item) => !item.archived && item.kind === kind.input.value && (!isExpense || item.expenseType === expenseType.input.value)); for (const item of available) { const option = document.createElement("option"); option.value = item.id; option.textContent = item.name; category.input.append(option); } };
-  kind.input.addEventListener("change", updateCategories); expenseType.input.addEventListener("change", updateCategories); updateCategories(); form.append(kind.wrapper, expenseType.wrapper, category.wrapper, amount.wrapper, date.wrapper, description.wrapper, error, submit);
-  form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const movement = { id: createId(), kind: kind.input.value, amountCents: parseEuroToCents(amount.input.value), categoryId: category.input.value, date: date.input.value, description: description.input.value.trim() || undefined, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; if (movement.kind === "expense") movement.expenseType = expenseType.input.value; assertMovement(movement); await state.database.put(STORE.movements, movement); form.reset(); date.input.value = todayCivilDate(); updateCategories(); await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare il movimento."; submit.disabled = false; } });
+  kind.input.addEventListener("change", updateCategories); expenseType.input.addEventListener("change", updateCategories);
+  if (editing) { kind.input.value = editing.kind; expenseType.input.value = editing.expenseType ?? "fixed"; amount.input.value = String(editing.amountCents / 100).replace(".", ","); date.input.value = editing.date; description.input.value = editing.description ?? ""; }
+  updateCategories(); if (editing) category.input.value = editing.categoryId;
+  const formActions = element("div", "form-actions"); if (editing) { const cancel = button("Annulla", "Annulla modifica", "secondary-button"); cancel.addEventListener("click", () => { state.editingMovementId = null; render(); }); formActions.append(cancel); } formActions.append(submit); form.append(kind.wrapper, expenseType.wrapper, category.wrapper, amount.wrapper, date.wrapper, description.wrapper, error, formActions);
+  form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const now = new Date().toISOString(); const movement = { id: editing?.id ?? createId(), kind: kind.input.value, amountCents: parseEuroToCents(amount.input.value), categoryId: category.input.value, date: date.input.value, description: description.input.value.trim() || undefined, createdAt: editing?.createdAt ?? now, updatedAt: now }; if (movement.kind === "expense") movement.expenseType = expenseType.input.value; assertMovement(movement); await state.database.put(STORE.movements, movement); state.editingMovementId = null; form.reset(); date.input.value = todayCivilDate(); updateCategories(); await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare il movimento."; submit.disabled = false; } });
   return form;
 }
 function analysisView() { return pendingView("Analisi", "I grafici appariranno qui quando saranno disponibili rilevazioni patrimoniali o movimenti registrati.", "Nessun grafico o andamento viene inventato in assenza di dati."); }
