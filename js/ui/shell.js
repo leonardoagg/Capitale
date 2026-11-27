@@ -14,7 +14,7 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], snapshotItems: [], movements: [], categories: [], settings: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, bulkWealthUpdate: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], snapshotItems: [], movements: [], categories: [], settings: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, bulkWealthUpdate: false, categoriesPanel: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.snapshotItems, state.movements, state.categories, state.settings] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.snapshotItems), database.getAll(STORE.movements), database.getAll(STORE.categories), database.getAll(STORE.settings)]); render(); };
   state.initialize = async () => { state.pinRecord = await database.get(STORE.security, "pin"); state.locked = Boolean(state.pinRecord); state.ready = true; await state.refreshPositions(); };
@@ -268,17 +268,37 @@ function pendingView(title, copy, note) {
 function settingsView(state, render) {
   const section = element("section", "settings-list");
   section.append(element("h1", "page-title", "Impostazioni"), element("p", "subtitle", "Configurazione locale di Capitale."));
-  for (const [title, description, availability] of [["Categorie", "Personalizza le sottocategorie dei movimenti.", "Milestone Movimenti"], ["Privacy e PIN", "Oscuramento importi e blocco locale facoltativo.", "Milestone Backup e sicurezza"], ["Backup e ripristino", "Esporta e recupera i dati dal dispositivo.", "Milestone Backup e sicurezza"]]) {
+  for (const [title, description, availability] of [["Categorie", "Personalizza le sottocategorie dei movimenti.", "Locale"], ["Privacy e PIN", "Oscuramento importi e blocco locale facoltativo.", "Locale"], ["Backup e ripristino", "Esporta e recupera i dati dal dispositivo.", "Locale"]]) {
     const row = element("article", "setting-row"); const copy = element("div");
     copy.append(element("h2", "setting-title", title), element("p", "setting-description", description));
     row.append(copy, element("span", "availability", availability)); section.append(row);
   }
-  const backup = button("Backup e ripristino", "Apri backup e ripristino", "primary-button"); backup.addEventListener("click", () => { state.backupPanel = true; render(); }); section.append(backup);
+  const categories = button("Gestisci categorie", "Gestisci categorie", "primary-button"); categories.addEventListener("click", () => { state.categoriesPanel = true; render(); }); section.append(categories);
+  const backup = button("Backup e ripristino", "Apri backup e ripristino", "secondary-button"); backup.addEventListener("click", () => { state.backupPanel = true; render(); }); section.append(backup);
   const privacy = button(state.pinRecord ? "Gestisci PIN" : "Attiva PIN", state.pinRecord ? "Gestisci PIN" : "Attiva PIN", "secondary-button"); privacy.addEventListener("click", () => { state.pinPanel = true; render(); }); section.append(privacy);
   const erase = button("Cancella tutti i dati", "Cancella tutti i dati", "delete-button"); erase.addEventListener("click", async () => { if (!window.confirm("Sicuro di voler cancellare tutti i dati locali? L’azione non è reversibile.")) return; await state.database.clearAllData(); state.pinRecord = null; state.locked = false; await state.refreshPositions(); }); section.append(erase);
+  if (state.categoriesPanel) section.append(modal("Categorie", categoriesPanel(state, render), () => { state.categoriesPanel = false; render(); }));
   if (state.backupPanel) section.append(modal("Backup e ripristino", backupPanel(state, render), () => { state.backupPanel = false; state.pendingRestore = null; render(); }));
   if (state.pinPanel) section.append(modal("Privacy e PIN", pinPanel(state, render), () => { state.pinPanel = false; render(); }));
   return section;
+}
+
+function categoriesPanel(state, render) {
+  const panel = element("section", "backup-panel");
+  const form = element("form", "position-form");
+  const kind = selectField("Tipo", "category-kind", [["expense", "Uscita"], ["income", "Entrata"]]);
+  const expenseType = selectField("Tipologia di uscita", "category-expense-type", [["fixed", "Fissa"], ["variable", "Variabile"], ["extraordinary", "Straordinaria"]]);
+  const name = inputField("Nome categoria", "category-name", "text", "es. Farmacia");
+  const error = element("p", "form-error"); const add = button("Aggiungi categoria", "Aggiungi categoria", "primary-button"); add.type = "submit";
+  const updateType = () => { expenseType.wrapper.hidden = kind.input.value !== "expense"; expenseType.input.required = kind.input.value === "expense"; };
+  kind.input.addEventListener("change", updateType); updateType(); form.append(kind.wrapper, expenseType.wrapper, name.wrapper, error, add);
+  form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; try { const categoryName = name.input.value.trim(); if (!categoryName) throw new Error("Inserisci un nome per la categoria."); const duplicate = state.categories.some((category) => !category.archived && category.kind === kind.input.value && category.expenseType === (kind.input.value === "expense" ? expenseType.input.value : null) && category.name.toLocaleLowerCase("it-IT") === categoryName.toLocaleLowerCase("it-IT")); if (duplicate) throw new Error("Esiste già una categoria con questo nome."); await state.database.put(STORE.categories, { id: createId(), kind: kind.input.value, expenseType: kind.input.value === "expense" ? expenseType.input.value : null, name: categoryName, archived: false, builtIn: false }); name.input.value = ""; await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile aggiungere la categoria."; } });
+  panel.append(form);
+  const list = element("section", "position-list");
+  for (const category of [...state.categories].sort((left, right) => `${left.kind}${left.expenseType ?? ""}${left.name}`.localeCompare(`${right.kind}${right.expenseType ?? ""}${right.name}`, "it"))) {
+    const row = element("article", "position-row"); const copy = element("div"); const label = category.kind === "income" ? "Entrata" : ({ fixed: "Fissa", variable: "Variabile", extraordinary: "Straordinaria" }[category.expenseType] ?? "Uscita"); copy.append(element("strong", "position-name", category.name), element("p", "metric-detail", category.archived ? `Archiviata · ${label}` : label)); const archive = button(category.archived ? "Ripristina" : "Archivia", category.archived ? `Ripristina ${category.name}` : `Archivia ${category.name}`, "text-button"); archive.addEventListener("click", async () => { if (!category.archived && !window.confirm(`Archiviare “${category.name}”? I movimenti esistenti resteranno invariati.`)) return; await state.database.put(STORE.categories, { ...category, archived: !category.archived }); await state.refreshPositions(); }); row.append(copy, archive); list.append(row);
+  }
+  panel.append(list); return panel;
 }
 
 function pinPanel(state, render) { const panel = element("section", "backup-panel"); panel.append(element("p", "empty-copy", "Il PIN blocca l’interfaccia, ma non cifra il database locale né i backup.")); if (state.pinRecord) { const disable = button("Disattiva PIN", "Disattiva PIN", "delete-button"); disable.addEventListener("click", async () => { if (!window.confirm("Disattivare il PIN?")) return; await state.database.delete(STORE.security, "pin"); state.pinRecord = null; state.pinPanel = false; render(); }); panel.append(disable); return panel; } const pin = inputField("Nuovo PIN", "new-pin", "password", "4–8 cifre"); pin.input.inputMode = "numeric"; const confirm = inputField("Conferma PIN", "confirm-pin", "password", "Ripeti il PIN"); confirm.input.inputMode = "numeric"; const error = element("p", "form-error"); const save = button("Attiva PIN", "Attiva PIN", "primary-button"); save.addEventListener("click", async () => { try { if (pin.input.value !== confirm.input.value) throw new Error("I PIN non coincidono."); state.pinRecord = await createPinRecord(pin.input.value); await state.database.put(STORE.security, state.pinRecord); state.pinPanel = false; render(); } catch (exception) { error.textContent = exception.message; } }); panel.append(pin.wrapper, confirm.wrapper, error, save); return panel; }

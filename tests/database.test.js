@@ -89,3 +89,14 @@ test("cancella tutti i dati e ripristina soltanto le categorie predefinite", asy
   assert.ok((await database.getAll(STORE.categories)).length > 0);
   database.close();
 });
+
+test("archivia una categoria senza eliminare i movimenti che la riferiscono", async () => {
+  const database = await CapitaleDatabase.open();
+  const category = { id: "custom-category", kind: "expense", expenseType: "variable", name: "Test", archived: false, builtIn: false };
+  await database.put(STORE.categories, category);
+  await database.put(STORE.movements, { id: "category-movement", kind: "expense", expenseType: "variable", categoryId: category.id, amountCents: 100, date: "2026-11-27" });
+  await database.put(STORE.categories, { ...category, archived: true });
+  assert.equal((await database.get(STORE.categories, category.id)).archived, true);
+  assert.equal((await database.get(STORE.movements, "category-movement")).categoryId, category.id);
+  database.close();
+});
