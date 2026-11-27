@@ -4,6 +4,7 @@ import "fake-indexeddb/auto";
 import { createBackup, restoreBackup, validateBackup } from "../js/backup/backup.js";
 import { decryptBackup, encryptBackup } from "../js/backup/crypto.js";
 import { movementsCsv } from "../js/backup/csv.js";
+import { createPinRecord, verifyPin } from "../js/security/pin.js";
 import { CapitaleDatabase } from "../js/db/database.js";
 import { STORE } from "../js/db/schema.js";
 
@@ -42,4 +43,12 @@ test("esporta CSV con separatore italiano e neutralizza formule", () => {
   assert.match(csv, /27\/11\/2026|2026-11-27/);
   assert.match(csv, /12,34/);
   assert.match(csv, /'=1\+1/);
+});
+
+test("conserva soltanto un verificatore del PIN", async () => {
+  const record = await createPinRecord("1234");
+  assert.equal(record.pin, undefined);
+  assert.equal(await verifyPin("1234", record), true);
+  assert.equal(await verifyPin("4321", record), false);
+  await assert.rejects(() => createPinRecord("12"));
 });
