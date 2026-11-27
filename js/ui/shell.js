@@ -5,12 +5,14 @@ import { assertPosition } from "../domain/validation.js";
 import { assertMovement } from "../domain/validation.js";
 import { calculateWealthSummary } from "../domain/wealth.js";
 import { calculateMonthlySummary } from "../domain/movements.js";
+import { createBackup } from "../backup/backup.js";
+import { encryptBackup } from "../backup/crypto.js";
 
 const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["movements", "⇅", "Movimenti"], ["analysis", "◔", "Analisi"]];
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, backupPanel: false, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories)]); render(); };
   render();
@@ -48,7 +50,7 @@ function createHeader(state, render) {
 
 function createContent(state, render) {
   const main = element("main", "screen");
-  const views = { home: () => homeView(state, render), wealth: () => wealthView(state, render), movements: () => movementsView(state, render), analysis: analysisView, settings: settingsView };
+  const views = { home: () => homeView(state, render), wealth: () => wealthView(state, render), movements: () => movementsView(state, render), analysis: analysisView, settings: () => settingsView(state, render) };
   main.append(views[state.current]());
   return main;
 }
@@ -188,7 +190,7 @@ function pendingView(title, copy, note) {
   return state;
 }
 
-function settingsView() {
+function settingsView(state, render) {
   const section = element("section", "settings-list");
   section.append(element("h1", "page-title", "Impostazioni"), element("p", "subtitle", "Configurazione locale di Capitale."));
   for (const [title, description, availability] of [["Categorie", "Personalizza le sottocategorie dei movimenti.", "Milestone Movimenti"], ["Privacy e PIN", "Oscuramento importi e blocco locale facoltativo.", "Milestone Backup e sicurezza"], ["Backup e ripristino", "Esporta e recupera i dati dal dispositivo.", "Milestone Backup e sicurezza"]]) {
@@ -196,7 +198,16 @@ function settingsView() {
     copy.append(element("h2", "setting-title", title), element("p", "setting-description", description));
     row.append(copy, element("span", "availability", availability)); section.append(row);
   }
+  const backup = button("Backup e ripristino", "Apri backup e ripristino", "primary-button"); backup.addEventListener("click", () => { state.backupPanel = true; render(); }); section.append(backup);
+  if (state.backupPanel) section.append(modal("Backup e ripristino", backupPanel(state), () => { state.backupPanel = false; render(); }));
   return section;
+}
+
+function backupPanel(state) {
+  const panel = element("section", "backup-panel"); const standard = button("Scarica backup JSON", "Scarica backup JSON", "primary-button"); const password = inputField("Password per backup cifrato", "backup-password", "password", "Almeno 8 caratteri"); const encrypted = button("Scarica backup cifrato", "Scarica backup cifrato", "secondary-button"); const status = element("p", "form-error");
+  standard.addEventListener("click", async () => { try { downloadJson(await createBackup(state.database), "Capitale_backup.json"); status.textContent = "Backup JSON preparato per il download."; } catch (error) { status.textContent = error.message; } });
+  encrypted.addEventListener("click", async () => { try { encrypted.disabled = true; downloadJson(await encryptBackup(await createBackup(state.database), password.input.value), "Capitale_backup.encrypted.json"); status.textContent = "Backup cifrato preparato per il download."; } catch (error) { status.textContent = error.message; } finally { encrypted.disabled = false; } });
+  panel.append(element("p", "empty-copy", "Il backup standard contiene dati finanziari leggibili. Quello cifrato richiede la password per il ripristino."), standard, password.wrapper, encrypted, status); return panel;
 }
 
 function createNavigation(state, render) {
@@ -216,6 +227,7 @@ function positionTypeLabel(type) { return { checking: "Conto corrente", deposit:
 function shiftMonth(month, offset) { const [year, monthNumber] = month.split("-").map(Number); const date = new Date(year, monthNumber - 1 + offset, 1); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
 function formatMonth(month) { const [year, monthNumber] = month.split("-").map(Number); return new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(new Date(year, monthNumber - 1, 1)); }
 function modal(title, content, close) { const overlay = element("section", "modal-overlay"); overlay.setAttribute("role", "dialog"); overlay.setAttribute("aria-modal", "true"); overlay.setAttribute("aria-label", title); const panel = element("div", "modal-panel"); const header = element("div", "modal-header"); const closeButton = button("×", "Chiudi", "icon-button"); closeButton.addEventListener("click", close); header.append(element("h2", "setting-title", title), closeButton); panel.append(header, content); overlay.append(panel); return overlay; }
+function downloadJson(data, filename) { const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })); const link = document.createElement("a"); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); }
 function createId() { return globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function hidden(state, value) { return state.amountsHidden && /[€—\d]/.test(value) ? "••••••" : value; }
 function screenTitle(id) { return NAV_ITEMS.find(([key]) => key === id)?.[2] ?? "Capitale"; }
