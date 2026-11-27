@@ -1,9 +1,10 @@
-const CACHE_NAME = "capitale-shell-v2";
+const CACHE_NAME = "capitale-shell-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./css/app.css",
+  "./css/forms.css",
   "./js/app.js",
   "./js/db/database.js",
   "./js/db/schema.js",

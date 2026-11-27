@@ -5,7 +5,7 @@ const root = document.querySelector("#app");
 
 try {
   const database = await CapitaleDatabase.open();
-  renderShell(root, { databaseReady: true });
+  renderShell(root, { database });
   window.addEventListener("pagehide", () => database.close(), { once: true });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 } catch (error) {

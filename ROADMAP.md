@@ -134,7 +134,7 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 |---|---|---|
 | M1 Fondamenta | In corso | Fondamenta e test unitari completati; resta la verifica offline/installazione con service worker e su iPhone. |
 | M2 Interfaccia | In corso | Navigazione e shell visiva implementate; restano verifica su viewport rappresentative e collaudo iPhone. |
-| M3 Patrimonio | Da iniziare | |
+| M3 Patrimonio | In corso | Inserimento delle cinque tipologie, calcoli e snapshot atomico implementati; restano modifica, archivio, aggiornamento massivo e storico. |
 | M4 Movimenti | Da iniziare | |
 | M5 Home e Analisi | Da iniziare | |
 | M6 Backup e sicurezza | Da iniziare | |
