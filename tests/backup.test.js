@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import "fake-indexeddb/auto";
 import { createBackup, restoreBackup, validateBackup } from "../js/backup/backup.js";
+import { decryptBackup, encryptBackup } from "../js/backup/crypto.js";
 import { CapitaleDatabase } from "../js/db/database.js";
 import { STORE } from "../js/db/schema.js";
 
@@ -23,4 +24,14 @@ test("rifiuta formati e identificatori duplicati", () => {
   const data = Object.fromEntries(["positions", "snapshots", "snapshotItems", "movements", "categories", "settings"].map((store) => [store, []]));
   data.movements = [{ id: "same" }, { id: "same" }];
   assert.throws(() => validateBackup({ format: "capitale-backup", formatVersion: 1, createdAt: "2026-11-27T10:00:00.000Z", data }));
+});
+
+test("cifra e decifra il backup e rifiuta password o contenuto alterato", async () => {
+  const data = Object.fromEntries(["positions", "snapshots", "snapshotItems", "movements", "categories", "settings"].map((store) => [store, []]));
+  const backup = { format: "capitale-backup", formatVersion: 1, createdAt: "2026-11-27T10:00:00.000Z", data };
+  const encrypted = await encryptBackup(backup, "password-di-prova");
+  assert.equal((await decryptBackup(encrypted, "password-di-prova")).format, "capitale-backup");
+  await assert.rejects(() => decryptBackup(encrypted, "password-errata"));
+  encrypted.ciphertext = `${encrypted.ciphertext.slice(0, -2)}aa`;
+  await assert.rejects(() => decryptBackup(encrypted, "password-di-prova"));
 });
