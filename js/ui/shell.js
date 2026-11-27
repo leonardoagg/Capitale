@@ -8,23 +8,29 @@ import { calculateMonthlySummary } from "../domain/movements.js";
 import { createBackup, restoreBackup, validateBackup } from "../backup/backup.js";
 import { decryptBackup, encryptBackup } from "../backup/crypto.js";
 import { movementsCsv, positionsCsv } from "../backup/csv.js";
+import { createPinRecord, verifyPin } from "../security/pin.js";
 
 const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["movements", "⇅", "Movimenti"], ["analysis", "◔", "Analisi"]];
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, backupPanel: false, pendingRestore: null, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories)]); render(); };
-  render();
-  state.refreshPositions().catch((error) => renderFatalError(root, error));
+  state.initialize = async () => { state.pinRecord = await database.get(STORE.security, "pin"); state.locked = Boolean(state.pinRecord); state.ready = true; await state.refreshPositions(); };
+  document.addEventListener("visibilitychange", () => { if (document.hidden && state.pinRecord) { state.locked = true; render(); } });
+  render(); state.initialize().catch((error) => renderFatalError(root, error));
 }
 
 function createApp(state, render) {
+  if (!state.ready) return pendingView("Capitale", "Verifica dell’archivio locale in corso.", "");
+  if (state.locked) return lockView(state, render);
   const app = element("div", "app");
   app.append(createHeader(state, render), createContent(state, render), createNavigation(state, render));
   return app;
 }
+
+function lockView(state, render) { const section = element("section", "empty-state"); const form = element("form", "position-form"); const pin = inputField("PIN", "unlock-pin", "password", "Inserisci il PIN"); pin.input.inputMode = "numeric"; const error = element("p", "form-error"); const submit = button("Sblocca", "Sblocca Capitale", "primary-button"); submit.type = "submit"; form.append(element("h1", "page-title", "Capitale bloccata"), element("p", "empty-copy", "Inserisci il PIN locale per continuare."), pin.wrapper, error, submit); form.addEventListener("submit", async (event) => { event.preventDefault(); if (await verifyPin(pin.input.value, state.pinRecord)) { state.locked = false; render(); } else error.textContent = "PIN non corretto."; }); section.append(form); return section; }
 
 function createHeader(state, render) {
   const header = element("header", "topbar");
@@ -200,9 +206,13 @@ function settingsView(state, render) {
     row.append(copy, element("span", "availability", availability)); section.append(row);
   }
   const backup = button("Backup e ripristino", "Apri backup e ripristino", "primary-button"); backup.addEventListener("click", () => { state.backupPanel = true; render(); }); section.append(backup);
+  const privacy = button(state.pinRecord ? "Gestisci PIN" : "Attiva PIN", state.pinRecord ? "Gestisci PIN" : "Attiva PIN", "secondary-button"); privacy.addEventListener("click", () => { state.pinPanel = true; render(); }); section.append(privacy);
   if (state.backupPanel) section.append(modal("Backup e ripristino", backupPanel(state, render), () => { state.backupPanel = false; state.pendingRestore = null; render(); }));
+  if (state.pinPanel) section.append(modal("Privacy e PIN", pinPanel(state, render), () => { state.pinPanel = false; render(); }));
   return section;
 }
+
+function pinPanel(state, render) { const panel = element("section", "backup-panel"); panel.append(element("p", "empty-copy", "Il PIN blocca l’interfaccia, ma non cifra il database locale né i backup.")); if (state.pinRecord) { const disable = button("Disattiva PIN", "Disattiva PIN", "delete-button"); disable.addEventListener("click", async () => { if (!window.confirm("Disattivare il PIN?")) return; await state.database.delete(STORE.security, "pin"); state.pinRecord = null; state.pinPanel = false; render(); }); panel.append(disable); return panel; } const pin = inputField("Nuovo PIN", "new-pin", "password", "4–8 cifre"); pin.input.inputMode = "numeric"; const confirm = inputField("Conferma PIN", "confirm-pin", "password", "Ripeti il PIN"); confirm.input.inputMode = "numeric"; const error = element("p", "form-error"); const save = button("Attiva PIN", "Attiva PIN", "primary-button"); save.addEventListener("click", async () => { try { if (pin.input.value !== confirm.input.value) throw new Error("I PIN non coincidono."); state.pinRecord = await createPinRecord(pin.input.value); await state.database.put(STORE.security, state.pinRecord); state.pinPanel = false; render(); } catch (exception) { error.textContent = exception.message; } }); panel.append(pin.wrapper, confirm.wrapper, error, save); return panel; }
 
 function backupPanel(state, render) {
   const panel = element("section", "backup-panel"); const standard = button("Scarica backup JSON", "Scarica backup JSON", "primary-button"); const password = inputField("Password per backup cifrato o ripristino", "backup-password", "password", "Almeno 8 caratteri se cifrato"); password.input.required = false; const encrypted = button("Scarica backup cifrato", "Scarica backup cifrato", "secondary-button"); const csvMovements = button("Esporta movimenti CSV", "Esporta movimenti CSV", "secondary-button"); const csvPositions = button("Esporta patrimonio CSV", "Esporta patrimonio CSV", "secondary-button"); const file = inputField("File di backup", "backup-file", "file", ""); file.input.accept = ".json,application/json"; const load = button("Verifica file per ripristino", "Verifica file per ripristino", "secondary-button"); const status = element("p", "form-error");
