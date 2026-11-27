@@ -224,7 +224,8 @@ function analysisView(state) {
   const values = history.map((item) => item.totalCents);
   const min = Math.min(...values), max = Math.max(...values), pad = Math.max((max - min) * .1, 100);
   const low = min - pad, high = max + pad, span = high - low;
-  const x = (index) => 132 + index * 320 / Math.max(1, history.length - 1);
+  const times = history.map((point) => Date.parse(`${point.effectiveDate}T12:00:00Z`)); const firstTime = times[0], lastTime = times.at(-1);
+  const x = (index) => firstTime === lastTime ? 292 : 132 + (times[index] - firstTime) * 320 / (lastTime - firstTime);
   const y = (value) => 165 - (value - low) * 125 / span;
   const node = (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag);
 
@@ -240,7 +241,7 @@ function analysisView(state) {
     const dot = node("circle"); dot.setAttribute("cx", x(index)); dot.setAttribute("cy", y(point.totalCents)); dot.setAttribute("r", "4"); dot.setAttribute("class", "chart-dot"); svg.append(dot);
     if (labelledIndexes.includes(index)) {
       const tick = node("line"); tick.setAttribute("x1", x(index)); tick.setAttribute("x2", x(index)); tick.setAttribute("y1", "165"); tick.setAttribute("y2", "171"); tick.setAttribute("class", "chart-axis"); svg.append(tick);
-      const label = node("text"); label.setAttribute("x", x(index)); label.setAttribute("y", "190"); label.setAttribute("text-anchor", index === 0 ? "start" : index === history.length - 1 ? "end" : "middle"); label.setAttribute("class", "chart-label"); label.textContent = shortChartDate(point.effectiveDate); svg.append(label);
+      const label = node("text"); label.setAttribute("x", x(index)); label.setAttribute("y", "190"); label.setAttribute("text-anchor", history.length === 1 ? "middle" : index === 0 ? "start" : index === history.length - 1 ? "end" : "middle"); label.setAttribute("class", "chart-label"); label.textContent = shortChartDate(point.effectiveDate); svg.append(label);
     }
   }
   card.append(svg, element("p", "metric-detail", state.amountsHidden ? "Importi nascosti" : `Da ${formatEuro(history[0].totalCents)} a ${formatEuro(history.at(-1).totalCents)}`));
