@@ -10,7 +10,7 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories)]); render(); };
   render();
@@ -138,9 +138,9 @@ function positionForm(state, render, editing = null) {
   return form;
 }
 function movementsView(state, render) {
-  const month = todayCivilDate().slice(0, 7); const summary = calculateMonthlySummary(state.movements, month);
+  const month = state.selectedMonth; const summary = calculateMonthlySummary(state.movements, month);
   const fragment = document.createDocumentFragment();
-  fragment.append(element("h1", "page-title", "Movimenti mensili"), element("p", "subtitle", "Totali registrati del mese corrente."));
+  fragment.append(element("h1", "page-title", "Movimenti mensili"), monthSelector(state, render), element("p", "subtitle", "Totali registrati del mese selezionato."));
   const totals = element("section", "movement-totals section-card");
   totals.append(metricCard("Entrate", hidden(state, formatEuro(summary.incomeCents)), ""), metricCard("Uscite", hidden(state, formatEuro(summary.expenseCents)), ""), metricCard("Bilancio", hidden(state, formatEuro(summary.balanceCents)), ""));
   fragment.append(totals, movementForm(state, render));
@@ -152,6 +152,11 @@ function movementsView(state, render) {
     row.append(copy, element("strong", `position-value ${movement.kind === "expense" ? "negative" : "positive"}`, `${movement.kind === "expense" ? "−" : "+"}${hidden(state, formatEuro(movement.amountCents))}`)); list.append(row);
   }
   fragment.append(list); return fragment;
+}
+
+function monthSelector(state, render) {
+  const selector = element("div", "month-selector"); const previous = button("‹", "Mese precedente", "icon-button"); const next = button("›", "Mese successivo", "icon-button"); const label = element("strong", "month-label", formatMonth(state.selectedMonth));
+  previous.addEventListener("click", () => { state.selectedMonth = shiftMonth(state.selectedMonth, -1); render(); }); next.addEventListener("click", () => { state.selectedMonth = shiftMonth(state.selectedMonth, 1); render(); }); selector.append(previous, label, next); return selector;
 }
 
 function movementForm(state, render) {
@@ -199,6 +204,8 @@ function metricCard(label, value, detail) { const card = element("article", "met
 function inputField(label, name, type, placeholder) { const wrapper = element("label", "form-field"); wrapper.append(element("span", "field-label", label)); const input = element("input", "field-input"); input.name = name; input.type = type; input.placeholder = placeholder; input.required = true; wrapper.append(input); return { wrapper, input }; }
 function selectField(label, name, options) { const wrapper = element("label", "form-field"); wrapper.append(element("span", "field-label", label)); const input = element("select", "field-input"); input.name = name; for (const [value, text] of options) { const option = document.createElement("option"); option.value = value; option.textContent = text; input.append(option); } wrapper.append(input); return { wrapper, input }; }
 function positionTypeLabel(type) { return { checking: "Conto corrente", deposit: "Conto deposito", etf: "ETF", bond: "Obbligazione", cash: "Contanti" }[type] ?? type; }
+function shiftMonth(month, offset) { const [year, monthNumber] = month.split("-").map(Number); const date = new Date(year, monthNumber - 1 + offset, 1); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
+function formatMonth(month) { const [year, monthNumber] = month.split("-").map(Number); return new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(new Date(year, monthNumber - 1, 1)); }
 function createId() { return globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function hidden(state, value) { return state.amountsHidden && /[€—\d]/.test(value) ? "••••••" : value; }
 function screenTitle(id) { return NAV_ITEMS.find(([key]) => key === id)?.[2] ?? "Capitale"; }
