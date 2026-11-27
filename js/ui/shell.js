@@ -189,7 +189,45 @@ function movementForm(state, render, editing = null) {
   form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const now = new Date().toISOString(); const movement = { id: editing?.id ?? createId(), kind: kind.input.value, amountCents: parseEuroToCents(amount.input.value), categoryId: category.input.value, date: date.input.value, description: description.input.value.trim() || undefined, createdAt: editing?.createdAt ?? now, updatedAt: now }; if (movement.kind === "expense") movement.expenseType = expenseType.input.value; assertMovement(movement); await state.database.put(STORE.movements, movement); state.editingMovementId = null; state.addingMovement = false; form.reset(); date.input.value = todayCivilDate(); updateCategories(); await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare il movimento."; submit.disabled = false; } });
   return form;
 }
-function analysisView(state) { const section = element("section", "settings-list"); const history = calculateWealthHistory(state.snapshots, state.snapshotItems); section.append(element("h1", "page-title", "Analisi"), element("p", "subtitle", "Andamento basato sulle fotografie disponibili.")); if (!history.length) { section.append(element("p", "empty-copy", "Nessuna fotografia patrimoniale disponibile.")); return section; } const card = element("section", "chart-card"); card.append(element("h2", "setting-title", "Andamento patrimonio")); const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 480 210"); const values = history.map((item) => item.totalCents); const min = Math.min(...values), max = Math.max(...values), pad = Math.max((max-min)*.1,100), low=min-pad, high=max+pad, span=high-low; const x=(i)=>132+i*320/Math.max(1,history.length-1), y=(v)=>165-(v-low)*125/span; for(const v of [low,(low+high)/2,high]) { const grid=document.createElementNS("http://www.w3.org/2000/svg","line"); grid.setAttribute("x1","132");grid.setAttribute("x2","452");grid.setAttribute("y1",y(v));grid.setAttribute("y2",y(v));grid.setAttribute("class","chart-grid");svg.append(grid); const t=document.createElementNS("http://www.w3.org/2000/svg","text");t.setAttribute("x","122");t.setAttribute("y",y(v)+4);t.setAttribute("text-anchor","end");t.setAttribute("class","chart-label");t.textContent=state.amountsHidden?"••••":formatEuro(Math.round(v));svg.append(t); } const line=document.createElementNS("http://www.w3.org/2000/svg","polyline");line.setAttribute("points",history.map((p,i)=>`${x(i)},${y(p.totalCents)}`).join(" "));line.setAttribute("fill","none");line.setAttribute("stroke","#69D6A5");line.setAttribute("stroke-width","4");svg.append(line); for(const [i,p] of history.entries()) { const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("cx",x(i));dot.setAttribute("cy",y(p.totalCents));dot.setAttribute("r","4");dot.setAttribute("class","chart-dot");svg.append(dot); if(i===0||i===history.length-1){const t=document.createElementNS("http://www.w3.org/2000/svg","text");t.setAttribute("x",x(i));t.setAttribute("y","190");t.setAttribute("text-anchor",i===0?"start":"end");t.setAttribute("class","chart-label");t.textContent=formatCivilDate(p.effectiveDate);svg.append(t);} } card.append(svg,element("p","metric-detail",state.amountsHidden?"Importi nascosti":`Da ${formatEuro(history[0].totalCents)} a ${formatEuro(history.at(-1).totalCents)}`));section.append(card);return section; }
+function analysisView(state) {
+  const section = element("section", "settings-list");
+  const history = calculateWealthHistory(state.snapshots, state.snapshotItems);
+  section.append(element("h1", "page-title", "Analisi"), element("p", "subtitle", "Andamento basato sulle fotografie disponibili."));
+  if (!history.length) { section.append(element("p", "empty-copy", "Nessuna fotografia patrimoniale disponibile.")); return section; }
+
+  const card = element("section", "chart-card");
+  card.append(element("h2", "setting-title", "Andamento patrimonio"));
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 480 230");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Grafico dell'andamento del patrimonio nel tempo");
+  const values = history.map((item) => item.totalCents);
+  const min = Math.min(...values), max = Math.max(...values), pad = Math.max((max - min) * .1, 100);
+  const low = min - pad, high = max + pad, span = high - low;
+  const x = (index) => 132 + index * 320 / Math.max(1, history.length - 1);
+  const y = (value) => 165 - (value - low) * 125 / span;
+  const node = (tag) => document.createElementNS("http://www.w3.org/2000/svg", tag);
+
+  for (const value of [low, (low + high) / 2, high]) {
+    const grid = node("line"); grid.setAttribute("x1", "132"); grid.setAttribute("x2", "452"); grid.setAttribute("y1", y(value)); grid.setAttribute("y2", y(value)); grid.setAttribute("class", "chart-grid"); svg.append(grid);
+    const label = node("text"); label.setAttribute("x", "122"); label.setAttribute("y", y(value) + 4); label.setAttribute("text-anchor", "end"); label.setAttribute("class", "chart-label"); label.textContent = state.amountsHidden ? "••••" : formatEuro(Math.round(value)); svg.append(label);
+  }
+  const axis = node("line"); axis.setAttribute("x1", "132"); axis.setAttribute("x2", "452"); axis.setAttribute("y1", "165"); axis.setAttribute("y2", "165"); axis.setAttribute("class", "chart-axis"); svg.append(axis);
+  const line = node("polyline"); line.setAttribute("points", history.map((point, index) => `${x(index)},${y(point.totalCents)}`).join(" ")); line.setAttribute("fill", "none"); line.setAttribute("stroke", "#69D6A5"); line.setAttribute("stroke-width", "4"); svg.append(line);
+
+  const labelledIndexes = history.length <= 6 ? history.map((_, index) => index) : [0, Math.floor((history.length - 1) / 2), history.length - 1];
+  for (const [index, point] of history.entries()) {
+    const dot = node("circle"); dot.setAttribute("cx", x(index)); dot.setAttribute("cy", y(point.totalCents)); dot.setAttribute("r", "4"); dot.setAttribute("class", "chart-dot"); svg.append(dot);
+    if (labelledIndexes.includes(index)) {
+      const tick = node("line"); tick.setAttribute("x1", x(index)); tick.setAttribute("x2", x(index)); tick.setAttribute("y1", "165"); tick.setAttribute("y2", "171"); tick.setAttribute("class", "chart-axis"); svg.append(tick);
+      const label = node("text"); label.setAttribute("x", x(index)); label.setAttribute("y", "190"); label.setAttribute("text-anchor", index === 0 ? "start" : index === history.length - 1 ? "end" : "middle"); label.setAttribute("class", "chart-label"); label.textContent = shortChartDate(point.effectiveDate); svg.append(label);
+    }
+  }
+  card.append(svg, element("p", "metric-detail", state.amountsHidden ? "Importi nascosti" : `Da ${formatEuro(history[0].totalCents)} a ${formatEuro(history.at(-1).totalCents)}`));
+  section.append(card); return section;
+}
+
+function shortChartDate(civilDate) { return `${civilDate.slice(8, 10)}/${civilDate.slice(5, 7)}`; }
 
 function pendingView(title, copy, note) {
   const state = element("section", "empty-state");
