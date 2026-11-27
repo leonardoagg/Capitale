@@ -37,6 +37,29 @@ export class CapitaleDatabase {
     return this.#run(storeName, "readwrite", (store) => requestToPromise(store.delete(id), "Eliminazione locale non riuscita."));
   }
 
+  async getAllByIndex(storeName, indexName, query = null) {
+    return this.#run(storeName, "readonly", (store) => requestToPromise(store.index(indexName).getAll(query), "Lettura locale non riuscita."));
+  }
+
+  async saveWealthSnapshot({ positions, snapshot, snapshotItems }) {
+    const names = [STORE.positions, STORE.snapshots, STORE.snapshotItems];
+    let transaction;
+    try { transaction = this.#db.transaction(names, "readwrite"); } catch (error) { throw new DatabaseError("Transazione patrimoniale non disponibile.", error); }
+    const completion = transactionDone(transaction);
+    try {
+      const positionStore = transaction.objectStore(STORE.positions);
+      const snapshotStore = transaction.objectStore(STORE.snapshots);
+      const itemStore = transaction.objectStore(STORE.snapshotItems);
+      for (const position of positions) positionStore.put(position);
+      snapshotStore.put(snapshot);
+      for (const item of snapshotItems) itemStore.put(item);
+      await completion;
+    } catch (error) {
+      try { transaction.abort(); } catch { /* transaction already completed */ }
+      throw error instanceof DatabaseError ? error : new DatabaseError("Salvataggio dello storico patrimoniale non riuscito.", error);
+    }
+  }
+
   async clearAllFinancialData() {
     return this.#run([STORE.positions, STORE.snapshots, STORE.snapshotItems, STORE.movements], "readwrite", (stores) =>
       Promise.all(stores.map((store) => requestToPromise(store.clear(), "Pulizia locale non riuscita."))));
