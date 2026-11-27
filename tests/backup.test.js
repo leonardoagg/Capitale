@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import "fake-indexeddb/auto";
 import { createBackup, restoreBackup, validateBackup } from "../js/backup/backup.js";
 import { decryptBackup, encryptBackup } from "../js/backup/crypto.js";
+import { movementsCsv } from "../js/backup/csv.js";
 import { CapitaleDatabase } from "../js/db/database.js";
 import { STORE } from "../js/db/schema.js";
 
@@ -34,4 +35,11 @@ test("cifra e decifra il backup e rifiuta password o contenuto alterato", async 
   await assert.rejects(() => decryptBackup(encrypted, "password-errata"));
   encrypted.ciphertext = `${encrypted.ciphertext.slice(0, -2)}aa`;
   await assert.rejects(() => decryptBackup(encrypted, "password-di-prova"));
+});
+
+test("esporta CSV con separatore italiano e neutralizza formule", () => {
+  const csv = movementsCsv([{ kind: "expense", expenseType: "fixed", amountCents: 1234, categoryId: "cat", date: "2026-11-27", description: "=1+1" }], [{ id: "cat", name: "Bollette" }]);
+  assert.match(csv, /27\/11\/2026|2026-11-27/);
+  assert.match(csv, /12,34/);
+  assert.match(csv, /'=1\+1/);
 });
