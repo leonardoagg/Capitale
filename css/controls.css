@@ -1,0 +1,1 @@
+.position-actions{display:grid;justify-items:end;gap:5px}.text-button{border:0;background:transparent;color:var(--liquid);font-size:.78rem;font-weight:700;padding:4px;cursor:pointer}.text-button:focus-visible{outline:2px solid var(--info);border-radius:5px}

@@ -10,7 +10,7 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories)]); render(); };
   render();
@@ -81,36 +81,41 @@ function wealthView(state, render) {
   const summary = calculateWealthSummary(state.positions);
   const card = element("section", "section-card");
   card.append(element("p", "card-label", "Totale attuale"), element("strong", "hero-value", hidden(state, formatEuro(summary.totalCents))), element("p", "hint", `${state.positions.filter((position) => position.status !== "archived").length} posizioni attive`));
-  fragment.append(card, positionList(state), positionForm(state, render));
+  fragment.append(card, positionList(state, render), positionForm(state, render));
   return fragment;
 }
 
-function positionList(state) {
+function positionList(state, render) {
   const list = element("section", "position-list");
   const active = state.positions.filter((position) => position.status !== "archived");
   if (!active.length) { list.append(element("p", "empty-copy", "Nessuna posizione registrata.")); return list; }
   for (const position of active) {
     const row = element("article", "position-row"); const copy = element("div");
     copy.append(element("strong", "position-name", position.name), element("p", "metric-detail", positionTypeLabel(position.type)));
-    row.append(copy, element("strong", "position-value", hidden(state, formatEuro(position.currentValueCents)))); list.append(row);
+    const actions = element("div", "position-actions"); const edit = button("Modifica", `Modifica ${position.name}`, "text-button");
+    edit.addEventListener("click", () => { state.editingPositionId = position.id; render(); });
+    actions.append(element("strong", "position-value", hidden(state, formatEuro(position.currentValueCents))), edit); row.append(copy, actions); list.append(row);
   }
   return list;
 }
 
 function positionForm(state, render) {
   const form = element("form", "position-form");
-  form.append(element("h2", "setting-title", "Aggiungi posizione"));
+  const editing = state.positions.find((position) => position.id === state.editingPositionId);
+  form.append(element("h2", "setting-title", editing ? "Modifica posizione" : "Aggiungi posizione"));
   const type = selectField("Tipo", "type", [["checking", "Conto corrente"], ["deposit", "Conto deposito"], ["etf", "ETF"], ["bond", "Obbligazione"], ["cash", "Contanti"]]);
   const name = inputField("Nome", "name", "text", "es. Conto principale");
   const value = inputField("Valore attuale (€)", "value", "text", "0,00"); value.inputmode = "decimal";
   const capital = inputField("Capitale investito (€)", "capital", "text", "Solo ETF e obbligazioni"); capital.inputmode = "decimal";
   const deposit = selectField("Deposito", "depositType", [["free", "Libero"], ["locked", "Vincolato"]]);
   const error = element("p", "form-error"); error.setAttribute("role", "alert");
-  const submit = button("Salva e crea fotografia", "Salva posizione e fotografia patrimoniale", "primary-button");
+  const submit = button(editing ? "Salva modifiche e fotografia" : "Salva e crea fotografia", "Salva posizione e fotografia patrimoniale", "primary-button");
   submit.type = "submit";
   form.append(type.wrapper, name.wrapper, value.wrapper, capital.wrapper, deposit.wrapper, error, submit);
   const updateFields = () => { const investing = ["etf", "bond"].includes(type.input.value); capital.wrapper.hidden = !investing; capital.input.required = investing; deposit.wrapper.hidden = type.input.value !== "deposit"; };
-  type.input.addEventListener("change", updateFields); updateFields();
+  type.input.addEventListener("change", updateFields);
+  if (editing) { type.input.value = editing.type; name.input.value = editing.name; value.input.value = String(editing.currentValueCents / 100).replace(".", ","); capital.input.value = editing.investedCapitalCents == null ? "" : String(editing.investedCapitalCents / 100).replace(".", ","); deposit.input.value = editing.depositType ?? "free"; }
+  updateFields();
   form.addEventListener("submit", async (event) => {
     event.preventDefault(); error.textContent = ""; submit.disabled = true;
     try {
@@ -118,14 +123,14 @@ function positionForm(state, render) {
       const investing = ["etf", "bond"].includes(type.input.value);
       const investedCapitalCents = investing ? parseEuroToCents(capital.input.value) : undefined;
       const now = new Date().toISOString();
-      const position = { id: createId(), type: type.input.value, name: name.input.value.trim(), status: "active", currentValueCents, createdAt: now, updatedAt: now, valuedOn: todayCivilDate() };
+      const position = { id: editing?.id ?? createId(), type: type.input.value, name: name.input.value.trim(), status: "active", currentValueCents, createdAt: editing?.createdAt ?? now, updatedAt: now, valuedOn: todayCivilDate() };
       if (type.input.value === "deposit") position.depositType = deposit.input.value;
       if (investing) position.investedCapitalCents = investedCapitalCents;
       assertPosition(position);
-      const allActive = [...state.positions.filter((item) => item.status !== "archived"), position];
+      const allActive = [...state.positions.filter((item) => item.status !== "archived" && item.id !== position.id), position];
       const snapshotId = createId();
       await state.database.saveWealthSnapshot({ positions: [position], snapshot: { id: snapshotId, effectiveDate: todayCivilDate(), createdAt: now }, snapshotItems: allActive.map((item) => ({ id: createId(), snapshotId, positionId: item.id, type: item.type, name: item.name, valueCents: item.currentValueCents, investedCapitalCents: item.investedCapitalCents ?? null, depositType: item.depositType ?? null, valuedOn: item.valuedOn })) });
-      form.reset(); updateFields(); await state.refreshPositions();
+      state.editingPositionId = null; form.reset(); updateFields(); await state.refreshPositions();
     } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare la posizione."; submit.disabled = false; }
   });
   return form;
