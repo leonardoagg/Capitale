@@ -30,3 +30,8 @@ test("costruisce lo storico soltanto dalle fotografie realmente disponibili", ()
   const history = calculateWealthHistory([{ id: "second", effectiveDate: "2026-11-02", createdAt: "2026-11-02T10:00:00Z" }, { id: "first", effectiveDate: "2026-11-01", createdAt: "2026-11-01T10:00:00Z" }], [{ snapshotId: "first", valueCents: 100 }, { snapshotId: "second", valueCents: 120 }, { snapshotId: "second", valueCents: 30 }]);
   assert.deepEqual(history.map((item) => [item.effectiveDate, item.totalCents]), [["2026-11-01", 100], ["2026-11-02", 150]]);
 });
+
+test("mostra una sola fotografia, la più recente, per ciascun giorno", () => {
+  const history = calculateWealthHistory([{ id: "old", effectiveDate: "2026-11-27", createdAt: "2026-11-27T08:00:00Z" }, { id: "new", effectiveDate: "2026-11-27", createdAt: "2026-11-27T12:00:00Z" }], [{ snapshotId: "old", valueCents: 100 }, { snapshotId: "new", valueCents: 200 }]);
+  assert.deepEqual(history.map((item) => item.totalCents), [200]);
+});

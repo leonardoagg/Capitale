@@ -35,5 +35,10 @@ export function calculateInvestmentGain(position) {
 }
 
 export function calculateWealthHistory(snapshots, snapshotItems) {
-  return [...snapshots].sort((left, right) => `${left.effectiveDate}${left.createdAt}`.localeCompare(`${right.effectiveDate}${right.createdAt}`)).map((snapshot) => ({ id: snapshot.id, effectiveDate: snapshot.effectiveDate, totalCents: sumCents(snapshotItems.filter((item) => item.snapshotId === snapshot.id).map((item) => item.valueCents)) }));
+  const latestByDate = new Map();
+  for (const snapshot of snapshots) {
+    const current = latestByDate.get(snapshot.effectiveDate);
+    if (!current || `${snapshot.createdAt}${snapshot.id}` > `${current.createdAt}${current.id}`) latestByDate.set(snapshot.effectiveDate, snapshot);
+  }
+  return [...latestByDate.values()].sort((left, right) => left.effectiveDate.localeCompare(right.effectiveDate)).map((snapshot) => ({ id: snapshot.id, effectiveDate: snapshot.effectiveDate, totalCents: sumCents(snapshotItems.filter((item) => item.snapshotId === snapshot.id).map((item) => item.valueCents)) }));
 }
