@@ -1,4 +1,4 @@
-const CACHE_NAME = "capitale-shell-v7";
+const CACHE_NAME = "capitale-shell-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,8 @@ const APP_SHELL = [
   "./js/domain/money.js",
   "./js/domain/date.js",
   "./js/domain/validation.js",
+  "./js/domain/movements.js",
+  "./js/domain/wealth.js",
   "./js/ui/shell.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

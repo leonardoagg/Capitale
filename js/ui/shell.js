@@ -2,15 +2,17 @@ import { STORE } from "../db/schema.js";
 import { formatCivilDate, todayCivilDate } from "../domain/date.js";
 import { formatEuro, parseEuroToCents } from "../domain/money.js";
 import { assertPosition } from "../domain/validation.js";
+import { assertMovement } from "../domain/validation.js";
 import { calculateWealthSummary } from "../domain/wealth.js";
+import { calculateMonthlySummary } from "../domain/movements.js";
 
 const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["movements", "⇅", "Movimenti"], ["analysis", "◔", "Analisi"]];
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], database };
   const render = () => root.replaceChildren(createApp(state, render));
-  state.refreshPositions = async () => { [state.positions, state.snapshots] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots)]); render(); };
+  state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories)]); render(); };
   render();
   state.refreshPositions().catch((error) => renderFatalError(root, error));
 }
@@ -46,7 +48,7 @@ function createHeader(state, render) {
 
 function createContent(state, render) {
   const main = element("main", "screen");
-  const views = { home: () => homeView(state, render), wealth: () => wealthView(state, render), movements: movementsView, analysis: analysisView, settings: settingsView };
+  const views = { home: () => homeView(state, render), wealth: () => wealthView(state, render), movements: () => movementsView(state, render), analysis: analysisView, settings: settingsView };
   main.append(views[state.current]());
   return main;
 }
@@ -127,7 +129,33 @@ function positionForm(state, render) {
   });
   return form;
 }
-function movementsView() { return pendingView("Movimenti mensili", "Nessun movimento registrato per questo mese.", "L’inserimento e la modifica dei movimenti saranno disponibili con la milestone Movimenti."); }
+function movementsView(state, render) {
+  const month = todayCivilDate().slice(0, 7); const summary = calculateMonthlySummary(state.movements, month);
+  const fragment = document.createDocumentFragment();
+  fragment.append(element("h1", "page-title", "Movimenti mensili"), element("p", "subtitle", "Totali registrati del mese corrente."));
+  const totals = element("section", "movement-totals section-card");
+  totals.append(metricCard("Entrate", hidden(state, formatEuro(summary.incomeCents)), ""), metricCard("Uscite", hidden(state, formatEuro(summary.expenseCents)), ""), metricCard("Bilancio", hidden(state, formatEuro(summary.balanceCents)), ""));
+  fragment.append(totals, movementForm(state, render));
+  const list = element("section", "position-list"); list.append(element("h2", "setting-title", "Registrati questo mese"));
+  if (!summary.movements.length) list.append(element("p", "empty-copy", "Nessun movimento registrato."));
+  for (const movement of [...summary.movements].sort((left, right) => right.date.localeCompare(left.date))) {
+    const row = element("article", "position-row"); const copy = element("div"); const category = state.categories.find((item) => item.id === movement.categoryId);
+    copy.append(element("strong", "position-name", category?.name ?? "Categoria archiviata"), element("p", "metric-detail", movement.date));
+    row.append(copy, element("strong", `position-value ${movement.kind === "expense" ? "negative" : "positive"}`, `${movement.kind === "expense" ? "−" : "+"}${hidden(state, formatEuro(movement.amountCents))}`)); list.append(row);
+  }
+  fragment.append(list); return fragment;
+}
+
+function movementForm(state, render) {
+  const form = element("form", "position-form"); form.append(element("h2", "setting-title", "Nuovo movimento"));
+  const kind = selectField("Tipo", "kind", [["expense", "Uscita"], ["income", "Entrata"]]); const expenseType = selectField("Tipologia di spesa", "expenseType", [["fixed", "Fissa"], ["variable", "Variabile"], ["extraordinary", "Straordinaria"]]); const category = selectField("Categoria", "category", []);
+  const amount = inputField("Importo (€)", "amount", "text", "0,00"); amount.input.inputMode = "decimal"; const date = inputField("Data", "date", "date", ""); date.input.value = todayCivilDate(); const description = inputField("Descrizione (facoltativa)", "description", "text", ""); description.input.required = false;
+  const error = element("p", "form-error"); error.setAttribute("role", "alert"); const submit = button("Salva movimento", "Salva movimento", "primary-button"); submit.type = "submit";
+  const updateCategories = () => { const isExpense = kind.input.value === "expense"; expenseType.wrapper.hidden = !isExpense; expenseType.input.required = isExpense; category.input.replaceChildren(); const available = state.categories.filter((item) => !item.archived && item.kind === kind.input.value && (!isExpense || item.expenseType === expenseType.input.value)); for (const item of available) { const option = document.createElement("option"); option.value = item.id; option.textContent = item.name; category.input.append(option); } };
+  kind.input.addEventListener("change", updateCategories); expenseType.input.addEventListener("change", updateCategories); updateCategories(); form.append(kind.wrapper, expenseType.wrapper, category.wrapper, amount.wrapper, date.wrapper, description.wrapper, error, submit);
+  form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const movement = { id: createId(), kind: kind.input.value, amountCents: parseEuroToCents(amount.input.value), categoryId: category.input.value, date: date.input.value, description: description.input.value.trim() || undefined, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; if (movement.kind === "expense") movement.expenseType = expenseType.input.value; assertMovement(movement); await state.database.put(STORE.movements, movement); form.reset(); date.input.value = todayCivilDate(); updateCategories(); await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare il movimento."; submit.disabled = false; } });
+  return form;
+}
 function analysisView() { return pendingView("Analisi", "I grafici appariranno qui quando saranno disponibili rilevazioni patrimoniali o movimenti registrati.", "Nessun grafico o andamento viene inventato in assenza di dati."); }
 
 function pendingView(title, copy, note) {
