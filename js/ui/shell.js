@@ -4,7 +4,7 @@ import { formatEuro, parseEuroToCents } from "../domain/money.js";
 import { assertPosition } from "../domain/validation.js";
 import { assertMovement } from "../domain/validation.js";
 import { calculateWealthHistory, calculateWealthSummary } from "../domain/wealth.js";
-import { calculateMonthlySummary } from "../domain/movements.js";
+import { calculateMonthlyHistory, calculateMonthlySummary } from "../domain/movements.js";
 import { createBackup, restoreBackup, validateBackup } from "../backup/backup.js";
 import { decryptBackup, encryptBackup } from "../backup/crypto.js";
 import { movementsCsv, positionsCsv } from "../backup/csv.js";
@@ -244,10 +244,21 @@ function analysisView(state) {
     }
   }
   card.append(svg, element("p", "metric-detail", state.amountsHidden ? "Importi nascosti" : `Da ${formatEuro(history[0].totalCents)} a ${formatEuro(history.at(-1).totalCents)}`));
-  section.append(card); return section;
+  section.append(card, movementAnalysisCard(state)); return section;
+}
+
+function movementAnalysisCard(state) {
+  const history = calculateMonthlyHistory(state.movements).slice(-6);
+  const card = element("section", "chart-card"); card.append(element("h2", "setting-title", "Entrate e uscite mensili"));
+  if (!history.length) { card.append(element("p", "empty-copy", "Nessun movimento registrato da analizzare.")); return card; }
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("viewBox", "0 0 360 190"); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Confronto mensile tra entrate e uscite registrate");
+  const max = Math.max(...history.flatMap((item) => [item.incomeCents, item.expenseCents]), 1); const group = 280 / history.length;
+  for (const [index, item] of history.entries()) { const baseX = 50 + index * group; for (const [offset, value, className] of [[0, item.incomeCents, "income-bar"], [group * .38, item.expenseCents, "expense-bar"]]) { const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect"); const height = value * 115 / max; rect.setAttribute("x", baseX + offset); rect.setAttribute("y", 145 - height); rect.setAttribute("width", group * .28); rect.setAttribute("height", height); rect.setAttribute("rx", "3"); rect.setAttribute("class", className); svg.append(rect); } const label = document.createElementNS("http://www.w3.org/2000/svg", "text"); label.setAttribute("x", baseX + group * .33); label.setAttribute("y", "166"); label.setAttribute("text-anchor", "middle"); label.setAttribute("class", "chart-label"); label.textContent = shortMonth(item.month); svg.append(label); }
+  card.append(svg, element("p", "metric-detail", state.amountsHidden ? "Importi nascosti" : "Verde: entrate · Rosso: uscite")); return card;
 }
 
 function shortChartDate(civilDate) { return `${civilDate.slice(8, 10)}/${civilDate.slice(5, 7)}`; }
+function shortMonth(month) { return new Intl.DateTimeFormat("it-IT", { month: "short", year: "2-digit" }).format(new Date(`${month}-01T12:00:00`)).replace(".", ""); }
 
 function latestSnapshotForDate(snapshots, effectiveDate) {
   return snapshots.filter((snapshot) => snapshot.effectiveDate === effectiveDate).sort((left, right) => `${right.createdAt}${right.id}`.localeCompare(`${left.createdAt}${left.id}`))[0];

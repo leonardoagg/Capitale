@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateMonthlySummary } from "../js/domain/movements.js";
+import { calculateMonthlyHistory, calculateMonthlySummary } from "../js/domain/movements.js";
 
 test("calcola il bilancio mensile registrato senza toccare il patrimonio", () => {
   const summary = calculateMonthlySummary([
@@ -18,4 +18,13 @@ test("calcola il bilancio mensile registrato senza toccare il patrimonio", () =>
 
 test("un mese senza movimenti restituisce zeri, non NaN", () => {
   assert.deepEqual(calculateMonthlySummary([], "2026-11"), { incomeCents: 0, expenseCents: 0, balanceCents: 0, byExpenseType: { fixed: 0, variable: 0, extraordinary: 0 }, movements: [] });
+});
+
+test("raggruppa entrate e uscite per mese senza coinvolgere il patrimonio", () => {
+  const history = calculateMonthlyHistory([
+    { kind: "expense", amountCents: 200, date: "2026-10-31" },
+    { kind: "income", amountCents: 1000, date: "2026-11-01" },
+    { kind: "expense", amountCents: 300, date: "2026-11-15" }
+  ]);
+  assert.deepEqual(history, [{ month: "2026-10", incomeCents: 0, expenseCents: 200, balanceCents: -200 }, { month: "2026-11", incomeCents: 1000, expenseCents: 300, balanceCents: 700 }]);
 });
