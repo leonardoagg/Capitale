@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateInvestmentGain, calculateWealthSummary } from "../js/domain/wealth.js";
+import { calculateInvestmentGain, calculateWealthHistory, calculateWealthSummary } from "../js/domain/wealth.js";
 
 test("calcola patrimonio, liquidità e investimenti senza usare movimenti", () => {
   const summary = calculateWealthSummary([
@@ -24,4 +24,9 @@ test("calcola patrimonio, liquidità e investimenti senza usare movimenti", () =
 test("non espone una percentuale quando il capitale investito è nullo", () => {
   assert.deepEqual(calculateInvestmentGain({ type: "etf", currentValueCents: 1000, investedCapitalCents: 0 }), { gainCents: 1000, percent: null });
   assert.equal(calculateInvestmentGain({ type: "cash", currentValueCents: 1000 }), null);
+});
+
+test("costruisce lo storico soltanto dalle fotografie realmente disponibili", () => {
+  const history = calculateWealthHistory([{ id: "second", effectiveDate: "2026-11-02", createdAt: "2026-11-02T10:00:00Z" }, { id: "first", effectiveDate: "2026-11-01", createdAt: "2026-11-01T10:00:00Z" }], [{ snapshotId: "first", valueCents: 100 }, { snapshotId: "second", valueCents: 120 }, { snapshotId: "second", valueCents: 30 }]);
+  assert.deepEqual(history.map((item) => [item.effectiveDate, item.totalCents]), [["2026-11-01", 100], ["2026-11-02", 150]]);
 });

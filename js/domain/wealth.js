@@ -33,3 +33,7 @@ export function calculateInvestmentGain(position) {
   const gainCents = position.currentValueCents - capital;
   return { gainCents, percent: capital > 0 ? (gainCents / capital) * 100 : null };
 }
+
+export function calculateWealthHistory(snapshots, snapshotItems) {
+  return [...snapshots].sort((left, right) => `${left.effectiveDate}${left.createdAt}`.localeCompare(`${right.effectiveDate}${right.createdAt}`)).map((snapshot) => ({ id: snapshot.id, effectiveDate: snapshot.effectiveDate, totalCents: sumCents(snapshotItems.filter((item) => item.snapshotId === snapshot.id).map((item) => item.valueCents)) }));
+}
