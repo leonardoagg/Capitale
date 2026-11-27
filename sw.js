@@ -1,4 +1,4 @@
-const CACHE_NAME = "capitale-shell-v34";
+const CACHE_NAME = "capitale-shell-v35";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -46,12 +46,11 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || event.request.url.origin !== self.location.origin) return;
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+    caches.match(event.request).then((cached) => cached || (event.request.mode === "navigate" ? caches.match("./index.html") : undefined)).then((cached) => cached || fetch(event.request).then((response) => {
       if (response.ok && new URL(event.request.url).pathname.startsWith(self.registration.scope.replace(self.location.origin, ""))) {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        const copy = response.clone(); caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
       }
       return response;
-    }))
+    }).catch(() => event.request.mode === "navigate" ? caches.match("./index.html") : Response.error()))
   );
 });
