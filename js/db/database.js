@@ -65,6 +65,27 @@ export class CapitaleDatabase {
       Promise.all(stores.map((store) => requestToPromise(store.clear(), "Pulizia locale non riuscita."))));
   }
 
+  async exportData() {
+    const stores = [STORE.positions, STORE.snapshots, STORE.snapshotItems, STORE.movements, STORE.categories, STORE.settings];
+    const entries = await Promise.all(stores.map(async (store) => [store, await this.getAll(store)]));
+    return Object.fromEntries(entries);
+  }
+
+  async replaceExportedData(data) {
+    const stores = [STORE.positions, STORE.snapshots, STORE.snapshotItems, STORE.movements, STORE.categories, STORE.settings];
+    let transaction;
+    try { transaction = this.#db.transaction(stores, "readwrite"); } catch (error) { throw new DatabaseError("Ripristino locale non disponibile.", error); }
+    const completion = transactionDone(transaction);
+    try {
+      for (const storeName of stores) transaction.objectStore(storeName).clear();
+      for (const storeName of stores) for (const record of data[storeName] ?? []) transaction.objectStore(storeName).put(record);
+      await completion;
+    } catch (error) {
+      try { transaction.abort(); } catch { /* already complete */ }
+      throw error instanceof DatabaseError ? error : new DatabaseError("Ripristino locale non riuscito.", error);
+    }
+  }
+
   async #run(storeNames, mode, action) {
     const names = Array.isArray(storeNames) ? storeNames : [storeNames];
     let transaction;
