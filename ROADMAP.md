@@ -23,10 +23,10 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 
 **Obiettivo:** app coerente con lo stile Dark finanziario e utilizzabile su schermi iPhone.
 
-- [ ] Implementare design token, tipografia, card, pulsanti, moduli, icone e stati vuoti/errori.
-- [ ] Navigazione Home / Patrimonio / Movimenti / Analisi, Impostazioni dalla Home.
-- [ ] Predisporre layout dei cinque contesti senza mostrare dati fittizi in produzione.
-- [ ] Gestire safe area, scroll, tastiera, contrasto, focus, reduced-motion e target tattili.
+- [x] Implementare design token, tipografia, card, pulsanti, moduli, icone e stati vuoti/errori. — Dark finanziario, controlli tattili e stati espliciti.
+- [x] Navigazione Home / Patrimonio / Movimenti / Analisi, Impostazioni dalla Home. — Verificata in browser locale il 2026-11-27.
+- [x] Predisporre layout dei cinque contesti senza mostrare dati fittizi in produzione.
+- [x] Gestire safe area, scroll, tastiera, contrasto, focus, reduced-motion e target tattili. — Verifica su Safari/iPhone reale pendente.
 - [ ] Verificare layout su viewport mobile rappresentative e desktop; documentare i risultati.
 
 **Gate:** tutte le schermate raggiungibili, navigazione coerente, niente overflow orizzontale o controlli essenziali coperti. Nessun pulsante presentato come funzionante quando non lo è ancora.
@@ -133,7 +133,7 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 | Milestone | Stato iniziale | Evidenze / note |
 |---|---|---|
 | M1 Fondamenta | In corso | Fondamenta e test unitari completati; resta la verifica offline/installazione con service worker e su iPhone. |
-| M2 Interfaccia | Da iniziare | |
+| M2 Interfaccia | In corso | Navigazione e shell visiva implementate; restano verifica su viewport rappresentative e collaudo iPhone. |
 | M3 Patrimonio | Da iniziare | |
 | M4 Movimenti | Da iniziare | |
 | M5 Home e Analisi | Da iniziare | |
