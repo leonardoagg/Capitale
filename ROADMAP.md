@@ -35,11 +35,11 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 
 **Obiettivo:** aggiornare più posizioni in pochi passaggi, mantenere lo storico e calcolare correttamente valori e plus/minusvalenze.
 
-- [ ] Creazione/modifica/archiviazione di conti correnti, conti deposito, ETF, obbligazioni e contanti.
+- [x] Creazione/modifica/archiviazione di conti correnti, conti deposito, ETF, obbligazioni e contanti. — Inserimento, modifica inline, archiviazione e cancellazione; l'archivio non contribuisce ai totali correnti.
 - [ ] Gruppi espandibili e schede singoli strumenti; campi specifici e facoltativi.
-- [ ] Aggiornamento massivo, totale in anteprima, conferma e snapshot atomico completo.
+- [x] Aggiornamento massivo, totale in anteprima, conferma e snapshot atomico completo. — Valori precompilati, anteprima totale e sostituzione atomica della fotografia del giorno.
 - [ ] Storico, correzione/eliminazione snapshot e conservazione dati delle posizioni archiviate.
-- [ ] Calcoli: totale, liquidità disponibile/vincolata, investimenti, capitale, plus/minusvalenza e percentuale semplice.
+- [x] Calcoli: totale, liquidità disponibile/vincolata, investimenti, capitale, plus/minusvalenza e percentuale semplice. — Calcoli in centesimi e percentuale assente quando il capitale è nullo.
 - [ ] Test: somme, valori nulli/negativi dove ammessi, capitale zero, vendite parziali tramite aggiornamento manuale del costo, archiviazione, più snapshot nella stessa data, correzione/eliminazione ultimo snapshot, rollback su errore.
 
 **Gate:** gli esempi patrimoniali delle specifiche coincidono; lo storico resta immutato salvo correzione esplicita; nessuna generazione di movimenti; totale corrente coerente fra schermate.
@@ -48,10 +48,10 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 
 **Obiettivo:** inserimento manuale rapido di entrate/uscite, consultazione mese per mese.
 
-- [ ] Modulo Nuovo movimento: tipo, importo, tipologia spesa, categoria, data, descrizione facoltativa.
-- [ ] Elenco con filtri, modifica ed eliminazione; prevenzione doppio invio.
-- [ ] Categorie personalizzabili, archiviazione senza perdere lo storico.
-- [ ] Selettore mese, totali registrati, bilancio, ripartizione fisse/variabili/straordinarie.
+- [x] Modulo Nuovo movimento: tipo, importo, tipologia spesa, categoria, data, descrizione facoltativa.
+- [x] Elenco con filtri, modifica ed eliminazione; prevenzione doppio invio. — Consultazione per mese, modifica inline, conferma prima della cancellazione e pulsante disabilitato durante il salvataggio.
+- [x] Categorie personalizzabili, archiviazione senza perdere lo storico.
+- [x] Selettore mese, totali registrati, bilancio, ripartizione fisse/variabili/straordinarie.
 - [ ] Test: confini mese/anno, date locali, modifica importo/data, eliminazione, categorie archiviate, mesi vuoti, importi non validi e indipendenza dal patrimonio.
 
 **Gate:** gli esempi di movimenti delle specifiche coincidono; una spesa non cambia alcun saldo patrimoniale; nessun automatismo o budget.
@@ -60,11 +60,11 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 
 **Obiettivo:** dare visione immediata del patrimonio e dei flussi registrati, senza mescolare i calcoli.
 
-- [ ] Home con patrimonio, variazione, grafico storico, liquidità/investimenti, ultimo aggiornamento, riepilogo mensile e azione rapida.
+- [ ] Home con patrimonio, variazione, grafico storico, liquidità/investimenti, ultimo aggiornamento, riepilogo mensile e azione rapida. — Patrimonio, liquidità/investimenti, ultimo aggiornamento, riepilogo mensile e azione rapida sono implementati; restano variazione e grafico in Home.
 - [ ] Chart.js locale; cinque grafici previsti dalle specifiche.
 - [ ] Filtri temporali, legende, tooltip, date effettive e stati senza dati.
 - [ ] Coerenza tra calcoli e viste; evitare grafici ingannevoli per saldi negativi, un solo snapshot e totali zero.
-- [ ] Implementare oscuramento importi su tutte le viste, inclusi grafici e tooltip.
+- [x] Implementare oscuramento importi su tutte le viste, inclusi grafici e tooltip. — Le etichette numeriche dei grafici sono oscurate; non sono presenti tooltip con valori.
 - [ ] Testare aggiornamento dei grafici dopo modifiche, filtri, archiviazione, cambio mese e reload.
 
 **Gate:** la Home e le Analisi si aggiornano dopo ogni commit, non inventano dati o rendimenti, e i grafici funzionano senza CDN/rete.
@@ -73,13 +73,13 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 
 **Obiettivo:** dati trasferibili e recuperabili, senza servizi esterni.
 
-- [ ] Backup JSON completo, versionato, senza segreti; nome file con data.
-- [ ] Backup cifrato facoltativo con Web Crypto, AES-256-GCM e derivazione PBKDF2, formati documentati.
+- [ ] Backup JSON completo, versionato, senza segreti; nome file con data. — Formato versionato senza segreti implementato; resta il nome file con data e ora.
+- [x] Backup cifrato facoltativo con Web Crypto, AES-256-GCM e derivazione PBKDF2, formati documentati.
 - [ ] Esportazione tramite condivisione/file o fallback download; messaggi coerenti con l'esito osservabile.
-- [ ] Ripristino con validazione, anteprima, conferma, sostituzione atomica e rollback.
-- [ ] Export CSV per movimenti e patrimonio/storico, escaping e mitigazione formule.
-- [ ] Stato backup e avviso interno a 30 giorni, nessuna notifica push.
-- [ ] PIN facoltativo, sblocco e blocco di sessione, gestione PIN dimenticato; limitazioni documentate.
+- [x] Ripristino con validazione, anteprima, conferma, sostituzione atomica e rollback.
+- [x] Export CSV per movimenti e patrimonio/storico, escaping e mitigazione formule.
+- [x] Stato backup e avviso interno a 30 giorni, nessuna notifica push.
+- [x] PIN facoltativo, sblocco e blocco di sessione, gestione PIN dimenticato; limitazioni documentate.
 - [ ] Cancellazione dati con doppia conferma e offerta backup.
 - [ ] Test round-trip standard/cifrato, password errata, file alterato, formato/versione non supportati, riferimenti invalidi, restore interrotto, export CSV, PIN e assenza di segreti nel backup.
 
@@ -134,10 +134,10 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 |---|---|---|
 | M1 Fondamenta | In corso | Fondamenta e test unitari completati; resta la verifica offline/installazione con service worker e su iPhone. |
 | M2 Interfaccia | In corso | Navigazione e shell visiva implementate; restano verifica su viewport rappresentative e collaudo iPhone. |
-| M3 Patrimonio | In corso | Inserimento delle cinque tipologie, calcoli e snapshot atomico implementati; restano modifica, archivio, aggiornamento massivo e storico. |
-| M4 Movimenti | In corso | Calcoli mensili e inserimento manuale con categorie iniziali implementati; restano filtri, modifica, eliminazione, categorie personalizzate e selettore mese. |
-| M5 Home e Analisi | Da iniziare | |
-| M6 Backup e sicurezza | Da iniziare | |
+| M3 Patrimonio | In corso | Inserimento, modifica, archiviazione, aggiornamento massivo e fotografia giornaliera implementati; restano storico consultabile e correzione/eliminazione di snapshot esplicita. |
+| M4 Movimenti | In corso | Flusso di inserimento, modifica, eliminazione, selettore mese e categorie personalizzate implementati; restano test di confine aggiuntivi e rifiniture filtri. |
+| M5 Home e Analisi | In corso | Andamento patrimonio e confronto mensile entrate/uscite implementati; restano distribuzione, andamento investimenti, filtri e collaudo delle viste. |
+| M6 Backup e sicurezza | In corso | Backup JSON/cifrato, restore validato, CSV, promemoria, PIN e pulizia locale implementati; resta la doppia conferma con proposta di backup e il collaudo browser/iPhone. |
 | M7 Collaudo | Da iniziare | |
 | M8 Pubblicazione | Da iniziare | |
 
