@@ -1,0 +1,1 @@
+.chart-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}.chart-card svg{display:block;width:100%;margin:10px 0}.chart-grid{stroke:#303743}.chart-label{fill:#9299a8;font:10px sans-serif}.chart-dot{fill:#101216;stroke:#69D6A5;stroke-width:3}
