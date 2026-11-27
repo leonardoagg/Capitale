@@ -5,14 +5,14 @@ import { assertPosition } from "../domain/validation.js";
 import { assertMovement } from "../domain/validation.js";
 import { calculateWealthSummary } from "../domain/wealth.js";
 import { calculateMonthlySummary } from "../domain/movements.js";
-import { createBackup } from "../backup/backup.js";
-import { encryptBackup } from "../backup/crypto.js";
+import { createBackup, restoreBackup, validateBackup } from "../backup/backup.js";
+import { decryptBackup, encryptBackup } from "../backup/crypto.js";
 
 const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["movements", "⇅", "Movimenti"], ["analysis", "◔", "Analisi"]];
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, backupPanel: false, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, backupPanel: false, pendingRestore: null, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories)]); render(); };
   render();
@@ -199,15 +199,18 @@ function settingsView(state, render) {
     row.append(copy, element("span", "availability", availability)); section.append(row);
   }
   const backup = button("Backup e ripristino", "Apri backup e ripristino", "primary-button"); backup.addEventListener("click", () => { state.backupPanel = true; render(); }); section.append(backup);
-  if (state.backupPanel) section.append(modal("Backup e ripristino", backupPanel(state), () => { state.backupPanel = false; render(); }));
+  if (state.backupPanel) section.append(modal("Backup e ripristino", backupPanel(state, render), () => { state.backupPanel = false; state.pendingRestore = null; render(); }));
   return section;
 }
 
-function backupPanel(state) {
-  const panel = element("section", "backup-panel"); const standard = button("Scarica backup JSON", "Scarica backup JSON", "primary-button"); const password = inputField("Password per backup cifrato", "backup-password", "password", "Almeno 8 caratteri"); const encrypted = button("Scarica backup cifrato", "Scarica backup cifrato", "secondary-button"); const status = element("p", "form-error");
+function backupPanel(state, render) {
+  const panel = element("section", "backup-panel"); const standard = button("Scarica backup JSON", "Scarica backup JSON", "primary-button"); const password = inputField("Password per backup cifrato o ripristino", "backup-password", "password", "Almeno 8 caratteri se cifrato"); password.input.required = false; const encrypted = button("Scarica backup cifrato", "Scarica backup cifrato", "secondary-button"); const file = inputField("File di backup", "backup-file", "file", ""); file.input.accept = ".json,application/json"; const load = button("Verifica file per ripristino", "Verifica file per ripristino", "secondary-button"); const status = element("p", "form-error");
   standard.addEventListener("click", async () => { try { downloadJson(await createBackup(state.database), "Capitale_backup.json"); status.textContent = "Backup JSON preparato per il download."; } catch (error) { status.textContent = error.message; } });
   encrypted.addEventListener("click", async () => { try { encrypted.disabled = true; downloadJson(await encryptBackup(await createBackup(state.database), password.input.value), "Capitale_backup.encrypted.json"); status.textContent = "Backup cifrato preparato per il download."; } catch (error) { status.textContent = error.message; } finally { encrypted.disabled = false; } });
-  panel.append(element("p", "empty-copy", "Il backup standard contiene dati finanziari leggibili. Quello cifrato richiede la password per il ripristino."), standard, password.wrapper, encrypted, status); return panel;
+  load.addEventListener("click", async () => { try { const selected = file.input.files?.[0]; if (!selected) throw new Error("Seleziona prima un file di backup."); const parsed = JSON.parse(await selected.text()); state.pendingRestore = parsed.format === "capitale-encrypted-backup" ? await decryptBackup(parsed, password.input.value) : validateBackup(parsed); render(); } catch (error) { status.textContent = error.message || "File di backup non valido."; } });
+  panel.append(element("p", "empty-copy", "Il backup standard contiene dati finanziari leggibili. Quello cifrato richiede la password per il ripristino."), standard, password.wrapper, encrypted, file.wrapper, load);
+  if (state.pendingRestore) { const counts = Object.entries(state.pendingRestore.data).map(([store, records]) => `${store}: ${records.length}`).join(" · "); const restore = button("Conferma ripristino completo", "Conferma ripristino completo", "delete-button"); restore.addEventListener("click", async () => { if (!window.confirm("Sicuro di voler sostituire tutti i dati locali con questo backup?")) return; await restoreBackup(state.database, state.pendingRestore); state.pendingRestore = null; state.backupPanel = false; await state.refreshPositions(); }); panel.append(element("p", "feature-note", `Backup verificato — ${counts}`), restore); }
+  panel.append(status); return panel;
 }
 
 function createNavigation(state, render) {

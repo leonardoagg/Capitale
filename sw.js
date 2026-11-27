@@ -1,4 +1,4 @@
-const CACHE_NAME = "capitale-shell-v17";
+const CACHE_NAME = "capitale-shell-v18";
 const APP_SHELL = [
   "./",
   "./index.html",
