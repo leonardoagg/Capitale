@@ -236,7 +236,7 @@ function analysisView(state) {
   const axis = node("line"); axis.setAttribute("x1", "132"); axis.setAttribute("x2", "452"); axis.setAttribute("y1", "165"); axis.setAttribute("y2", "165"); axis.setAttribute("class", "chart-axis"); svg.append(axis);
   const line = node("polyline"); line.setAttribute("points", history.map((point, index) => `${x(index)},${y(point.totalCents)}`).join(" ")); line.setAttribute("fill", "none"); line.setAttribute("stroke", "#69D6A5"); line.setAttribute("stroke-width", "4"); svg.append(line);
 
-  const labelledIndexes = history.length <= 6 ? history.map((_, index) => index) : [0, Math.floor((history.length - 1) / 2), history.length - 1];
+  const labelledIndexes = history.length <= 6 ? history.map((_, index) => index) : history.length <= 10 ? [0, Math.round((history.length - 1) * .25), Math.round((history.length - 1) * .5), Math.round((history.length - 1) * .75), history.length - 1] : [0, Math.round((history.length - 1) / 3), Math.round((history.length - 1) * 2 / 3), history.length - 1];
   for (const [index, point] of history.entries()) {
     const dot = node("circle"); dot.setAttribute("cx", x(index)); dot.setAttribute("cy", y(point.totalCents)); dot.setAttribute("r", "4"); dot.setAttribute("class", "chart-dot"); svg.append(dot);
     if (labelledIndexes.includes(index)) {
