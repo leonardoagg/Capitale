@@ -10,7 +10,7 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.movements, state.categories] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.movements), database.getAll(STORE.categories)]); render(); };
   render();
@@ -81,7 +81,8 @@ function wealthView(state, render) {
   const summary = calculateWealthSummary(state.positions);
   const card = element("section", "section-card");
   card.append(element("p", "card-label", "Totale attuale"), element("strong", "hero-value", hidden(state, formatEuro(summary.totalCents))), element("p", "hint", `${state.positions.filter((position) => position.status !== "archived").length} posizioni attive`));
-  fragment.append(card, positionList(state, render), positionForm(state, render, null));
+  const add = button("Aggiungi posizione", "Aggiungi posizione", "primary-button"); add.addEventListener("click", () => { state.addingPosition = true; render(); });
+  fragment.append(card, add, positionList(state, render)); if (state.addingPosition) fragment.append(modal("Aggiungi posizione", positionForm(state, render, null), () => { state.addingPosition = false; render(); }));
   return fragment;
 }
 
@@ -132,7 +133,7 @@ function positionForm(state, render, editing = null) {
       const allActive = [...state.positions.filter((item) => item.status !== "archived" && item.id !== position.id), position];
       const effectiveDate = todayCivilDate(); const existingSnapshot = state.snapshots.filter((item) => item.effectiveDate === effectiveDate).sort((left, right) => `${right.createdAt}${right.id}`.localeCompare(`${left.createdAt}${left.id}`))[0]; const snapshotId = existingSnapshot?.id ?? createId();
       await state.database.saveWealthSnapshot({ positions: [position], replaceSnapshotId: existingSnapshot?.id ?? null, snapshot: { id: snapshotId, effectiveDate, createdAt: existingSnapshot?.createdAt ?? now, updatedAt: now }, snapshotItems: allActive.map((item) => ({ id: createId(), snapshotId, positionId: item.id, type: item.type, name: item.name, valueCents: item.currentValueCents, investedCapitalCents: item.investedCapitalCents ?? null, depositType: item.depositType ?? null, valuedOn: item.valuedOn })) });
-      state.editingPositionId = null; form.reset(); updateFields(); await state.refreshPositions();
+      state.editingPositionId = null; state.addingPosition = false; form.reset(); updateFields(); await state.refreshPositions();
     } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare la posizione."; submit.disabled = false; }
   });
   return form;
@@ -143,19 +144,20 @@ function movementsView(state, render) {
   fragment.append(element("h1", "page-title", "Movimenti mensili"), monthSelector(state, render), element("p", "subtitle", "Totali registrati del mese selezionato."));
   const totals = element("section", "movement-totals section-card");
   totals.append(metricCard("Entrate", hidden(state, formatEuro(summary.incomeCents)), ""), metricCard("Uscite", hidden(state, formatEuro(summary.expenseCents)), ""), metricCard("Bilancio", hidden(state, formatEuro(summary.balanceCents)), ""));
-  fragment.append(totals);
+  const add = button("Nuovo movimento", "Nuovo movimento", "primary-button"); add.addEventListener("click", () => { state.addingMovement = true; render(); });
+  fragment.append(totals, add);
   const list = element("section", "position-list"); list.append(element("h2", "setting-title", "Registrati questo mese"));
   if (!summary.movements.length) list.append(element("p", "empty-copy", "Nessun movimento registrato."));
   for (const movement of [...summary.movements].sort((left, right) => right.date.localeCompare(left.date))) {
     const row = element("article", "position-row"); const copy = element("div"); const category = state.categories.find((item) => item.id === movement.categoryId);
     copy.append(element("strong", "position-name", category?.name ?? "Categoria archiviata"), element("p", "metric-detail", movement.date));
     const actions = element("div", "position-actions");
-    const edit = button("✎", `Modifica movimento ${category?.name ?? ""}`, "text-button"); edit.addEventListener("click", () => { state.editingMovementId = movement.id; render(); });
-    const remove = button("⌫", `Cancella movimento ${category?.name ?? ""}`, "text-button danger-button"); remove.addEventListener("click", async () => { if (!window.confirm("Cancellare definitivamente questo movimento?")) return; await state.database.delete(STORE.movements, movement.id); if (state.editingMovementId === movement.id) state.editingMovementId = null; await state.refreshPositions(); });
+    const edit = button("✎", `Modifica movimento ${category?.name ?? ""}`, "action-button"); edit.addEventListener("click", () => { state.editingMovementId = movement.id; render(); });
+    const remove = button("⌫", `Cancella movimento ${category?.name ?? ""}`, "action-button danger-button"); remove.addEventListener("click", async () => { if (!window.confirm("Cancellare definitivamente questo movimento?")) return; await state.database.delete(STORE.movements, movement.id); if (state.editingMovementId === movement.id) state.editingMovementId = null; await state.refreshPositions(); });
     actions.append(element("strong", `position-value ${movement.kind === "expense" ? "negative" : "positive"}`, `${movement.kind === "expense" ? "−" : "+"}${hidden(state, formatEuro(movement.amountCents))}`), edit, remove); row.append(copy, actions); list.append(row);
     if (state.editingMovementId === movement.id) list.append(movementForm(state, render, movement));
   }
-  fragment.append(list, movementForm(state, render, null)); return fragment;
+  fragment.append(list); if (state.addingMovement) fragment.append(modal("Nuovo movimento", movementForm(state, render, null), () => { state.addingMovement = false; render(); })); return fragment;
 }
 
 function monthSelector(state, render) {
@@ -173,7 +175,7 @@ function movementForm(state, render, editing = null) {
   if (editing) { kind.input.value = editing.kind; expenseType.input.value = editing.expenseType ?? "fixed"; amount.input.value = String(editing.amountCents / 100).replace(".", ","); date.input.value = editing.date; description.input.value = editing.description ?? ""; }
   updateCategories(); if (editing) category.input.value = editing.categoryId;
   const formActions = element("div", "form-actions"); if (editing) { const cancel = button("Annulla", "Annulla modifica", "secondary-button"); cancel.addEventListener("click", () => { state.editingMovementId = null; render(); }); formActions.append(cancel); } formActions.append(submit); form.append(kind.wrapper, expenseType.wrapper, category.wrapper, amount.wrapper, date.wrapper, description.wrapper, error, formActions);
-  form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const now = new Date().toISOString(); const movement = { id: editing?.id ?? createId(), kind: kind.input.value, amountCents: parseEuroToCents(amount.input.value), categoryId: category.input.value, date: date.input.value, description: description.input.value.trim() || undefined, createdAt: editing?.createdAt ?? now, updatedAt: now }; if (movement.kind === "expense") movement.expenseType = expenseType.input.value; assertMovement(movement); await state.database.put(STORE.movements, movement); state.editingMovementId = null; form.reset(); date.input.value = todayCivilDate(); updateCategories(); await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare il movimento."; submit.disabled = false; } });
+  form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const now = new Date().toISOString(); const movement = { id: editing?.id ?? createId(), kind: kind.input.value, amountCents: parseEuroToCents(amount.input.value), categoryId: category.input.value, date: date.input.value, description: description.input.value.trim() || undefined, createdAt: editing?.createdAt ?? now, updatedAt: now }; if (movement.kind === "expense") movement.expenseType = expenseType.input.value; assertMovement(movement); await state.database.put(STORE.movements, movement); state.editingMovementId = null; state.addingMovement = false; form.reset(); date.input.value = todayCivilDate(); updateCategories(); await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare il movimento."; submit.disabled = false; } });
   return form;
 }
 function analysisView() { return pendingView("Analisi", "I grafici appariranno qui quando saranno disponibili rilevazioni patrimoniali o movimenti registrati.", "Nessun grafico o andamento viene inventato in assenza di dati."); }
@@ -213,6 +215,7 @@ function selectField(label, name, options) { const wrapper = element("label", "f
 function positionTypeLabel(type) { return { checking: "Conto corrente", deposit: "Conto deposito", etf: "ETF", bond: "Obbligazione", cash: "Contanti" }[type] ?? type; }
 function shiftMonth(month, offset) { const [year, monthNumber] = month.split("-").map(Number); const date = new Date(year, monthNumber - 1 + offset, 1); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`; }
 function formatMonth(month) { const [year, monthNumber] = month.split("-").map(Number); return new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(new Date(year, monthNumber - 1, 1)); }
+function modal(title, content, close) { const overlay = element("section", "modal-overlay"); overlay.setAttribute("role", "dialog"); overlay.setAttribute("aria-modal", "true"); overlay.setAttribute("aria-label", title); const panel = element("div", "modal-panel"); const header = element("div", "modal-header"); const closeButton = button("×", "Chiudi", "icon-button"); closeButton.addEventListener("click", close); header.append(element("h2", "setting-title", title), closeButton); panel.append(header, content); overlay.append(panel); return overlay; }
 function createId() { return globalThis.crypto?.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function hidden(state, value) { return state.amountsHidden && /[€—\d]/.test(value) ? "••••••" : value; }
 function screenTitle(id) { return NAV_ITEMS.find(([key]) => key === id)?.[2] ?? "Capitale"; }
