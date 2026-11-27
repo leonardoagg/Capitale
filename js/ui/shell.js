@@ -1,5 +1,5 @@
 import { STORE } from "../db/schema.js";
-import { todayCivilDate } from "../domain/date.js";
+import { formatCivilDate, todayCivilDate } from "../domain/date.js";
 import { formatEuro, parseEuroToCents } from "../domain/money.js";
 import { assertPosition } from "../domain/validation.js";
 import { calculateWealthSummary } from "../domain/wealth.js";
@@ -8,9 +8,9 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], database };
   const render = () => root.replaceChildren(createApp(state, render));
-  state.refreshPositions = async () => { state.positions = await database.getAll(STORE.positions); render(); };
+  state.refreshPositions = async () => { [state.positions, state.snapshots] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots)]); render(); };
   render();
   state.refreshPositions().catch((error) => renderFatalError(root, error));
 }
@@ -53,12 +53,14 @@ function createContent(state, render) {
 
 function homeView(state, render) {
   const fragment = document.createDocumentFragment();
+  const summary = calculateWealthSummary(state.positions);
+  const latestSnapshot = [...state.snapshots].sort((left, right) => `${right.effectiveDate}${right.createdAt}`.localeCompare(`${left.effectiveDate}${left.createdAt}`))[0];
   const intro = element("section", "intro");
   intro.append(element("h1", "page-title", "Panoramica"), element("p", "subtitle", "Il tuo spazio finanziario, senza dati dimostrativi."));
   const wealth = element("section", "hero-card");
-  wealth.append(element("p", "card-label", "Patrimonio totale"), element("strong", "hero-value", hidden(state, "Non ancora rilevato")), element("p", "hint", "Aggiungi una posizione per iniziare a tracciare il patrimonio."));
+  wealth.append(element("p", "card-label", "Patrimonio totale"), element("strong", "hero-value", hidden(state, latestSnapshot ? formatEuro(summary.totalCents) : "Non ancora rilevato")), element("p", "hint", latestSnapshot ? `Ultima fotografia: ${formatCivilDate(latestSnapshot.effectiveDate)}` : "Aggiungi una posizione per iniziare a tracciare il patrimonio."));
   const quick = element("div", "two-column");
-  quick.append(metricCard("Liquidità", hidden(state, "—"), "Nessuna posizione"), metricCard("Investimenti", hidden(state, "—"), "Nessuna posizione"));
+  quick.append(metricCard("Liquidità", hidden(state, formatEuro(summary.liquidityCents)), summary.lockedDepositCents ? `Vincolata: ${hidden(state, formatEuro(summary.lockedDepositCents))}` : ""), metricCard("Investimenti", hidden(state, formatEuro(summary.investmentValueCents)), summary.investedCapitalCents ? `Capitale: ${hidden(state, formatEuro(summary.investedCapitalCents))}` : ""));
   const month = element("section", "section-card");
   month.append(element("div", "section-title", "Movimenti del mese"), element("p", "registered-label", "Totali registrati"));
   const totals = element("div", "movement-totals");
