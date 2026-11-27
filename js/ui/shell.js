@@ -14,7 +14,7 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], snapshotItems: [], movements: [], categories: [], settings: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], snapshotItems: [], movements: [], categories: [], settings: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, bulkWealthUpdate: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.snapshotItems, state.movements, state.categories, state.settings] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.snapshotItems), database.getAll(STORE.movements), database.getAll(STORE.categories), database.getAll(STORE.settings)]); render(); };
   state.initialize = async () => { state.pinRecord = await database.get(STORE.security, "pin"); state.locked = Boolean(state.pinRecord); state.ready = true; await state.refreshPositions(); };
@@ -92,8 +92,10 @@ function wealthView(state, render) {
   const summary = calculateWealthSummary(state.positions);
   const card = element("section", "section-card");
   card.append(element("p", "card-label", "Totale attuale"), element("strong", "hero-value", hidden(state, formatEuro(summary.totalCents))), element("p", "hint", `${state.positions.filter((position) => position.status !== "archived").length} posizioni attive`));
+  const update = button("Aggiorna patrimonio", "Aggiorna tutte le posizioni", "secondary-button"); update.addEventListener("click", () => { state.bulkWealthUpdate = true; render(); });
   const add = button("Aggiungi posizione", "Aggiungi posizione", "primary-button"); add.addEventListener("click", () => { state.addingPosition = true; render(); });
-  fragment.append(card, add, positionList(state, render)); if (state.addingPosition) fragment.append(modal("Aggiungi posizione", positionForm(state, render, null), () => { state.addingPosition = false; render(); }));
+  const actions = element("div", "form-actions"); actions.append(update, add);
+  fragment.append(card, actions, positionList(state, render)); if (state.addingPosition) fragment.append(modal("Aggiungi posizione", positionForm(state, render, null), () => { state.addingPosition = false; render(); })); if (state.bulkWealthUpdate) fragment.append(modal("Aggiorna patrimonio", bulkWealthForm(state, render), () => { state.bulkWealthUpdate = false; render(); }));
   return fragment;
 }
 
@@ -117,8 +119,8 @@ function positionForm(state, render, editing = null) {
   form.append(element("h2", "setting-title", editing ? "Modifica posizione" : "Aggiungi posizione"));
   const type = selectField("Tipo", "type", [["checking", "Conto corrente"], ["deposit", "Conto deposito"], ["etf", "ETF"], ["bond", "Obbligazione"], ["cash", "Contanti"]]);
   const name = inputField("Nome", "name", "text", "es. Conto principale");
-  const value = inputField("Valore attuale (€)", "value", "text", "0,00"); value.inputmode = "decimal";
-  const capital = inputField("Capitale investito (€)", "capital", "text", "Solo ETF e obbligazioni"); capital.inputmode = "decimal";
+  const value = inputField("Valore attuale (€)", "value", "text", "0,00"); value.input.inputMode = "decimal";
+  const capital = inputField("Capitale investito (€)", "capital", "text", "Solo ETF e obbligazioni"); capital.input.inputMode = "decimal";
   const deposit = selectField("Deposito", "depositType", [["free", "Libero"], ["locked", "Vincolato"]]);
   const error = element("p", "form-error"); error.setAttribute("role", "alert");
   const submit = button(editing ? "Salva modifiche" : "Aggiungi", editing ? "Salva modifiche" : "Aggiungi posizione", "primary-button");
@@ -147,6 +149,24 @@ function positionForm(state, render, editing = null) {
       state.editingPositionId = null; state.addingPosition = false; form.reset(); updateFields(); await state.refreshPositions();
     } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare la posizione."; submit.disabled = false; }
   });
+  return form;
+}
+
+function bulkWealthForm(state, render) {
+  const active = state.positions.filter((position) => position.status !== "archived");
+  if (!active.length) return element("p", "empty-copy", "Aggiungi prima una posizione da aggiornare.");
+  const form = element("form", "position-form");
+  form.append(element("p", "feature-note", "I valori lasciati invariati vengono comunque inclusi nella fotografia di oggi."));
+  const fields = active.map((position) => {
+    const value = inputField(`${position.name} — valore (€)`, `value-${position.id}`, "text", "0,00"); value.input.value = String(position.currentValueCents / 100).replace(".", ","); value.input.inputMode = "decimal";
+    let capital = null;
+    if (["etf", "bond"].includes(position.type)) { capital = inputField(`${position.name} — capitale investito (€)`, `capital-${position.id}`, "text", "0,00"); capital.input.value = String((position.investedCapitalCents ?? 0) / 100).replace(".", ","); capital.input.inputMode = "decimal"; }
+    form.append(value.wrapper); if (capital) form.append(capital.wrapper); return { position, value, capital };
+  });
+  const total = element("p", "metric-detail"); const error = element("p", "form-error"); const submit = button("Salva aggiornamento", "Salva aggiornamento patrimoniale", "primary-button"); submit.type = "submit";
+  const preview = () => { try { total.textContent = `Nuovo totale: ${formatEuro(fields.reduce((sum, field) => sum + parseEuroToCents(field.value.input.value, { allowNegative: true }), 0))}`; } catch { total.textContent = "Inserisci importi validi per vedere il totale."; } };
+  for (const field of fields) { field.value.input.addEventListener("input", preview); if (field.capital) field.capital.input.addEventListener("input", preview); } preview(); form.append(total, error, submit);
+  form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const now = new Date().toISOString(); const positions = fields.map(({ position, value, capital }) => { const updated = { ...position, currentValueCents: parseEuroToCents(value.input.value, { allowNegative: true }), valuedOn: todayCivilDate(), updatedAt: now }; if (capital) updated.investedCapitalCents = parseEuroToCents(capital.input.value); assertPosition(updated); return updated; }); const effectiveDate = todayCivilDate(); const existingSnapshot = latestSnapshotForDate(state.snapshots, effectiveDate); const snapshotId = existingSnapshot?.id ?? createId(); await state.database.saveWealthSnapshot({ positions, replaceSnapshotId: existingSnapshot?.id ?? null, snapshot: { id: snapshotId, effectiveDate, createdAt: existingSnapshot?.createdAt ?? now, updatedAt: now }, snapshotItems: snapshotItemsFor(snapshotId, positions) }); state.bulkWealthUpdate = false; await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile aggiornare il patrimonio."; submit.disabled = false; } });
   return form;
 }
 function movementsView(state, render) {

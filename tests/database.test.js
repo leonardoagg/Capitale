@@ -45,6 +45,18 @@ test("sostituisce le righe della fotografia quando la stessa giornata viene aggi
   database.close();
 });
 
+test("aggiornamento massivo salva tutti i valori in una sola fotografia giornaliera", async () => {
+  const database = await CapitaleDatabase.open();
+  const first = { id: "bulk-first", type: "checking", name: "Conto", status: "active", currentValueCents: 1000 };
+  const second = { id: "bulk-second", type: "etf", name: "ETF", status: "active", currentValueCents: 2000, investedCapitalCents: 1500 };
+  await database.saveWealthSnapshot({ positions: [first, second], snapshot: { id: "bulk-snapshot", effectiveDate: "2026-11-27", createdAt: "2026-11-27T10:00:00.000Z" }, snapshotItems: [{ id: "bulk-old", snapshotId: "bulk-snapshot", positionId: first.id, type: first.type, name: first.name, valueCents: 1000 }] });
+  const changed = [{ ...first, currentValueCents: 1200 }, { ...second, currentValueCents: 2200, investedCapitalCents: 1600 }];
+  await database.saveWealthSnapshot({ positions: changed, replaceSnapshotId: "bulk-snapshot", snapshot: { id: "bulk-snapshot", effectiveDate: "2026-11-27", createdAt: "2026-11-27T10:00:00.000Z", updatedAt: "2026-11-27T12:00:00.000Z" }, snapshotItems: changed.map((position) => ({ id: `bulk-${position.id}`, snapshotId: "bulk-snapshot", positionId: position.id, type: position.type, name: position.name, valueCents: position.currentValueCents, investedCapitalCents: position.investedCapitalCents })) });
+  assert.equal((await database.get(STORE.snapshots, "bulk-snapshot")).updatedAt, "2026-11-27T12:00:00.000Z");
+  assert.deepEqual((await database.getAllByIndex(STORE.snapshotItems, "by-snapshot", "bulk-snapshot")).map((item) => item.valueCents).sort(), [1200, 2200]);
+  database.close();
+});
+
 test("cancella posizione e aggiorna atomicamente la fotografia del giorno", async () => {
   const database = await CapitaleDatabase.open();
   await database.put(STORE.positions, { id: "delete-position", type: "cash", name: "Da cancellare", status: "active", currentValueCents: 100 });
