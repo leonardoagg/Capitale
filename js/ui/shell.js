@@ -56,6 +56,7 @@ function createContent(state, render) {
 function homeView(state, render) {
   const fragment = document.createDocumentFragment();
   const summary = calculateWealthSummary(state.positions);
+  const monthly = calculateMonthlySummary(state.movements, todayCivilDate().slice(0, 7));
   const latestSnapshot = [...state.snapshots].sort((left, right) => `${right.effectiveDate}${right.createdAt}`.localeCompare(`${left.effectiveDate}${left.createdAt}`))[0];
   const intro = element("section", "intro");
   intro.append(element("h1", "page-title", "Panoramica"), element("p", "subtitle", "Il tuo spazio finanziario, senza dati dimostrativi."));
@@ -66,8 +67,8 @@ function homeView(state, render) {
   const month = element("section", "section-card");
   month.append(element("div", "section-title", "Movimenti del mese"), element("p", "registered-label", "Totali registrati"));
   const totals = element("div", "movement-totals");
-  totals.append(metricCard("Entrate", hidden(state, "0,00 €"), ""), metricCard("Uscite", hidden(state, "0,00 €"), ""), metricCard("Bilancio", hidden(state, "0,00 €"), ""));
-  month.append(totals, element("p", "empty-copy", "Nessun movimento registrato."));
+  totals.append(metricCard("Entrate", hidden(state, formatEuro(monthly.incomeCents)), ""), metricCard("Uscite", hidden(state, formatEuro(monthly.expenseCents)), ""), metricCard("Bilancio", hidden(state, formatEuro(monthly.balanceCents)), ""));
+  month.append(totals, element("p", "empty-copy", monthly.movements.length ? "Bilancio basato sui movimenti registrati." : "Nessun movimento registrato."));
   const newMovement = button("Nuovo movimento", "Apri la sezione Movimenti", "primary-button");
   newMovement.addEventListener("click", () => { state.current = "movements"; render(); });
   fragment.append(intro, wealth, quick, month, newMovement);
