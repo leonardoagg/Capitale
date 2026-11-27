@@ -1,6 +1,5 @@
-const CACHE_NAME = "capitale-shell-v35";
+const CACHE_NAME = "capitale-shell-ha-v1";
 const APP_SHELL = [
-  "./",
   "./index.html",
   "./manifest.webmanifest",
   "./css/app.css",

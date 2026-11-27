@@ -3,7 +3,7 @@
   "short_name": "Capitale",
   "description": "Il tuo patrimonio. Le tue spese. Il tuo controllo.",
   "lang": "it",
-  "start_url": "./",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#101216",
