@@ -14,7 +14,7 @@ const NAV_ITEMS = [["home", "⌂", "Home"], ["wealth", "◫", "Patrimonio"], ["m
 
 export function renderShell(root, { database }) {
   if (!database) return renderFatalError(root, new Error("Non è possibile inizializzare l’archivio locale su questo dispositivo."));
-  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], snapshotItems: [], movements: [], categories: [], settings: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, bulkWealthUpdate: false, categoriesPanel: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), database };
+  const state = { current: "home", amountsHidden: false, positions: [], snapshots: [], snapshotItems: [], movements: [], categories: [], editingPositionId: null, editingMovementId: null, addingPosition: false, addingMovement: false, bulkWealthUpdate: false, categoriesPanel: false, backupPanel: false, pendingRestore: null, pinPanel: false, pinRecord: null, locked: false, ready: false, selectedMonth: todayCivilDate().slice(0, 7), wealthRange: "all", database };
   const render = () => root.replaceChildren(createApp(state, render));
   state.refreshPositions = async () => { [state.positions, state.snapshots, state.snapshotItems, state.movements, state.categories, state.settings] = await Promise.all([database.getAll(STORE.positions), database.getAll(STORE.snapshots), database.getAll(STORE.snapshotItems), database.getAll(STORE.movements), database.getAll(STORE.categories), database.getAll(STORE.settings)]); render(); };
   state.initialize = async () => { state.pinRecord = await database.get(STORE.security, "pin"); state.locked = Boolean(state.pinRecord); state.ready = true; await state.refreshPositions(); };
@@ -57,7 +57,7 @@ function createHeader(state, render) {
 
 function createContent(state, render) {
   const main = element("main", "screen");
-  const views = { home: () => homeView(state, render), wealth: () => wealthView(state, render), movements: () => movementsView(state, render), analysis: () => analysisView(state), settings: () => settingsView(state, render) };
+  const views = { home: () => homeView(state, render), wealth: () => wealthView(state, render), movements: () => movementsView(state, render), analysis: () => analysisView(state, render), settings: () => settingsView(state, render) };
   main.append(views[state.current]());
   return main;
 }
@@ -209,11 +209,13 @@ function movementForm(state, render, editing = null) {
   form.addEventListener("submit", async (event) => { event.preventDefault(); error.textContent = ""; submit.disabled = true; try { const now = new Date().toISOString(); const movement = { id: editing?.id ?? createId(), kind: kind.input.value, amountCents: parseEuroToCents(amount.input.value), categoryId: category.input.value, date: date.input.value, description: description.input.value.trim() || undefined, createdAt: editing?.createdAt ?? now, updatedAt: now }; if (movement.kind === "expense") movement.expenseType = expenseType.input.value; assertMovement(movement); await state.database.put(STORE.movements, movement); state.editingMovementId = null; state.addingMovement = false; form.reset(); date.input.value = todayCivilDate(); updateCategories(); await state.refreshPositions(); } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare il movimento."; submit.disabled = false; } });
   return form;
 }
-function analysisView(state) {
+function analysisView(state, render) {
   const section = element("section", "settings-list");
-  const history = calculateWealthHistory(state.snapshots, state.snapshotItems);
+  const allHistory = calculateWealthHistory(state.snapshots, state.snapshotItems); const history = filterWealthHistory(allHistory, state.wealthRange);
   section.append(element("h1", "page-title", "Analisi"), element("p", "subtitle", "Andamento basato sulle fotografie disponibili."));
-  if (!history.length) { section.append(element("p", "empty-copy", "Nessuna fotografia patrimoniale disponibile.")); return section; }
+  if (!allHistory.length) { section.append(element("p", "empty-copy", "Nessuna fotografia patrimoniale disponibile.")); return section; }
+  const range = selectField("Periodo patrimonio", "wealth-range", [["1m", "Ultimo mese"], ["3m", "Ultimi 3 mesi"], ["1y", "Ultimo anno"], ["3y", "Ultimi 3 anni"], ["5y", "Ultimi 5 anni"], ["all", "Tutto lo storico"]]); range.input.value = state.wealthRange; range.input.addEventListener("change", () => { state.wealthRange = range.input.value; render(); }); section.append(range.wrapper);
+  if (!history.length) { section.append(element("p", "empty-copy", "Nessuna fotografia nel periodo selezionato.")); return section; }
 
   const card = element("section", "chart-card");
   card.append(element("h2", "setting-title", "Andamento patrimonio"));
@@ -258,8 +260,15 @@ function movementAnalysisCard(state) {
   card.append(svg, element("p", "metric-detail", state.amountsHidden ? "Importi nascosti" : "Verde: entrate · Rosso: uscite")); return card;
 }
 
-function shortChartDate(civilDate) { return `${civilDate.slice(8, 10)}/${civilDate.slice(5, 7)}`; }
+function shortChartDate(civilDate) { return `${civilDate.slice(8, 10)}/${civilDate.slice(5, 7)}/${civilDate.slice(2, 4)}`; }
 function shortMonth(month) { return new Intl.DateTimeFormat("it-IT", { month: "short", year: "2-digit" }).format(new Date(`${month}-01T12:00:00`)).replace(".", ""); }
+
+function filterWealthHistory(history, range) {
+  if (range === "all" || !history.length) return history;
+  const units = { "1m": 1, "3m": 3, "1y": 12, "3y": 36, "5y": 60 }; const end = new Date(`${history.at(-1).effectiveDate}T12:00:00Z`); end.setUTCMonth(end.getUTCMonth() - units[range]); const threshold = end.toISOString().slice(0, 10);
+  return history.filter((point) => point.effectiveDate >= threshold);
+}
+
 
 function latestSnapshotForDate(snapshots, effectiveDate) {
   return snapshots.filter((snapshot) => snapshot.effectiveDate === effectiveDate).sort((left, right) => `${right.createdAt}${right.id}`.localeCompare(`${left.createdAt}${left.id}`))[0];
