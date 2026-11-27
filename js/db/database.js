@@ -1,4 +1,4 @@
-import { DB_NAME, DB_VERSION, STORE, createSchema } from "./schema.js";
+import { DB_NAME, DB_VERSION, STORE, createSchema, defaultCategories } from "./schema.js";
 
 export class DatabaseError extends Error {
   constructor(message, cause) { super(message, { cause }); this.name = "DatabaseError"; }
@@ -81,6 +81,11 @@ export class CapitaleDatabase {
   async clearAllFinancialData() {
     return this.#run([STORE.positions, STORE.snapshots, STORE.snapshotItems, STORE.movements], "readwrite", (stores) =>
       Promise.all(stores.map((store) => requestToPromise(store.clear(), "Pulizia locale non riuscita."))));
+  }
+
+  async clearAllData() {
+    const stores = Object.values(STORE); const transaction = this.#db.transaction(stores, "readwrite"); const completion = transactionDone(transaction);
+    try { for (const name of stores) transaction.objectStore(name).clear(); for (const category of defaultCategories()) transaction.objectStore(STORE.categories).put(category); await completion; } catch (error) { try { transaction.abort(); } catch { /* complete */ } throw new DatabaseError("Cancellazione locale non riuscita.", error); }
   }
 
   async exportData() {

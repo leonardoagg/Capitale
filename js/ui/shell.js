@@ -209,6 +209,7 @@ function settingsView(state, render) {
   }
   const backup = button("Backup e ripristino", "Apri backup e ripristino", "primary-button"); backup.addEventListener("click", () => { state.backupPanel = true; render(); }); section.append(backup);
   const privacy = button(state.pinRecord ? "Gestisci PIN" : "Attiva PIN", state.pinRecord ? "Gestisci PIN" : "Attiva PIN", "secondary-button"); privacy.addEventListener("click", () => { state.pinPanel = true; render(); }); section.append(privacy);
+  const erase = button("Cancella tutti i dati", "Cancella tutti i dati", "delete-button"); erase.addEventListener("click", async () => { if (!window.confirm("Sicuro di voler cancellare tutti i dati locali? L’azione non è reversibile.")) return; await state.database.clearAllData(); state.pinRecord = null; state.locked = false; await state.refreshPositions(); }); section.append(erase);
   if (state.backupPanel) section.append(modal("Backup e ripristino", backupPanel(state, render), () => { state.backupPanel = false; state.pendingRestore = null; render(); }));
   if (state.pinPanel) section.append(modal("Privacy e PIN", pinPanel(state, render), () => { state.pinPanel = false; render(); }));
   return section;

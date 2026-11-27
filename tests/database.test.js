@@ -54,3 +54,14 @@ test("cancella posizione e aggiorna atomicamente la fotografia del giorno", asyn
   assert.deepEqual(await database.getAllByIndex(STORE.snapshotItems, "by-snapshot", "delete-snapshot"), []);
   database.close();
 });
+
+test("cancella tutti i dati e ripristina soltanto le categorie predefinite", async () => {
+  const database = await CapitaleDatabase.open();
+  await database.put(STORE.movements, { id: "erase-movement", kind: "income", amountCents: 1, categoryId: "income-other", date: "2026-11-27" });
+  await database.put(STORE.security, { key: "pin", value: "test" });
+  await database.clearAllData();
+  assert.equal((await database.getAll(STORE.movements)).length, 0);
+  assert.equal(await database.get(STORE.security, "pin"), undefined);
+  assert.ok((await database.getAll(STORE.categories)).length > 0);
+  database.close();
+});
