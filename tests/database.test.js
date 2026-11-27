@@ -35,3 +35,12 @@ test("salva posizione, snapshot e righe storiche nella stessa transazione", asyn
   assert.equal((await database.getAllByIndex(STORE.snapshotItems, "by-snapshot", "snapshot-test")).length, 1);
   database.close();
 });
+
+test("sostituisce le righe della fotografia quando la stessa giornata viene aggiornata", async () => {
+  const database = await CapitaleDatabase.open();
+  await database.saveWealthSnapshot({ positions: [], snapshot: { id: "daily-snapshot", effectiveDate: "2026-11-27", createdAt: "2026-11-27T10:00:00.000Z" }, snapshotItems: [{ id: "old-item", snapshotId: "daily-snapshot", positionId: "p", type: "cash", name: "Vecchio", valueCents: 100 }] });
+  await database.saveWealthSnapshot({ positions: [], replaceSnapshotId: "daily-snapshot", snapshot: { id: "daily-snapshot", effectiveDate: "2026-11-27", createdAt: "2026-11-27T10:00:00.000Z", updatedAt: "2026-11-27T11:00:00.000Z" }, snapshotItems: [{ id: "new-item", snapshotId: "daily-snapshot", positionId: "p", type: "cash", name: "Nuovo", valueCents: 200 }] });
+  const items = await database.getAllByIndex(STORE.snapshotItems, "by-snapshot", "daily-snapshot");
+  assert.deepEqual(items.map((item) => item.id), ["new-item"]);
+  database.close();
+});

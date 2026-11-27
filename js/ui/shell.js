@@ -109,7 +109,7 @@ function positionForm(state, render) {
   const capital = inputField("Capitale investito (€)", "capital", "text", "Solo ETF e obbligazioni"); capital.inputmode = "decimal";
   const deposit = selectField("Deposito", "depositType", [["free", "Libero"], ["locked", "Vincolato"]]);
   const error = element("p", "form-error"); error.setAttribute("role", "alert");
-  const submit = button(editing ? "Salva modifiche e fotografia" : "Salva e crea fotografia", "Salva posizione e fotografia patrimoniale", "primary-button");
+  const submit = button(editing ? "Salva modifiche" : "Aggiungi", editing ? "Salva modifiche" : "Aggiungi posizione", "primary-button");
   submit.type = "submit";
   form.append(type.wrapper, name.wrapper, value.wrapper, capital.wrapper, deposit.wrapper, error, submit);
   const updateFields = () => { const investing = ["etf", "bond"].includes(type.input.value); capital.wrapper.hidden = !investing; capital.input.required = investing; deposit.wrapper.hidden = type.input.value !== "deposit"; };
@@ -128,8 +128,8 @@ function positionForm(state, render) {
       if (investing) position.investedCapitalCents = investedCapitalCents;
       assertPosition(position);
       const allActive = [...state.positions.filter((item) => item.status !== "archived" && item.id !== position.id), position];
-      const snapshotId = createId();
-      await state.database.saveWealthSnapshot({ positions: [position], snapshot: { id: snapshotId, effectiveDate: todayCivilDate(), createdAt: now }, snapshotItems: allActive.map((item) => ({ id: createId(), snapshotId, positionId: item.id, type: item.type, name: item.name, valueCents: item.currentValueCents, investedCapitalCents: item.investedCapitalCents ?? null, depositType: item.depositType ?? null, valuedOn: item.valuedOn })) });
+      const effectiveDate = todayCivilDate(); const existingSnapshot = state.snapshots.filter((item) => item.effectiveDate === effectiveDate).sort((left, right) => `${right.createdAt}${right.id}`.localeCompare(`${left.createdAt}${left.id}`))[0]; const snapshotId = existingSnapshot?.id ?? createId();
+      await state.database.saveWealthSnapshot({ positions: [position], replaceSnapshotId: existingSnapshot?.id ?? null, snapshot: { id: snapshotId, effectiveDate, createdAt: existingSnapshot?.createdAt ?? now, updatedAt: now }, snapshotItems: allActive.map((item) => ({ id: createId(), snapshotId, positionId: item.id, type: item.type, name: item.name, valueCents: item.currentValueCents, investedCapitalCents: item.investedCapitalCents ?? null, depositType: item.depositType ?? null, valuedOn: item.valuedOn })) });
       state.editingPositionId = null; form.reset(); updateFields(); await state.refreshPositions();
     } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare la posizione."; submit.disabled = false; }
   });

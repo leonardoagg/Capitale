@@ -41,7 +41,7 @@ export class CapitaleDatabase {
     return this.#run(storeName, "readonly", (store) => requestToPromise(store.index(indexName).getAll(query), "Lettura locale non riuscita."));
   }
 
-  async saveWealthSnapshot({ positions, snapshot, snapshotItems }) {
+  async saveWealthSnapshot({ positions, snapshot, snapshotItems, replaceSnapshotId = null }) {
     const names = [STORE.positions, STORE.snapshots, STORE.snapshotItems];
     let transaction;
     try { transaction = this.#db.transaction(names, "readwrite"); } catch (error) { throw new DatabaseError("Transazione patrimoniale non disponibile.", error); }
@@ -50,9 +50,16 @@ export class CapitaleDatabase {
       const positionStore = transaction.objectStore(STORE.positions);
       const snapshotStore = transaction.objectStore(STORE.snapshots);
       const itemStore = transaction.objectStore(STORE.snapshotItems);
-      for (const position of positions) positionStore.put(position);
-      snapshotStore.put(snapshot);
-      for (const item of snapshotItems) itemStore.put(item);
+      const writeSnapshot = () => {
+        for (const position of positions) positionStore.put(position);
+        snapshotStore.put(snapshot);
+        for (const item of snapshotItems) itemStore.put(item);
+      };
+      if (replaceSnapshotId) {
+        const request = itemStore.index("by-snapshot").openCursor(IDBKeyRange.only(replaceSnapshotId));
+        request.onsuccess = () => { const cursor = request.result; if (cursor) { cursor.delete(); cursor.continue(); } else writeSnapshot(); };
+        request.onerror = () => transaction.abort();
+      } else writeSnapshot();
       await completion;
     } catch (error) {
       try { transaction.abort(); } catch { /* transaction already completed */ }
