@@ -81,7 +81,7 @@ function wealthView(state, render) {
   const summary = calculateWealthSummary(state.positions);
   const card = element("section", "section-card");
   card.append(element("p", "card-label", "Totale attuale"), element("strong", "hero-value", hidden(state, formatEuro(summary.totalCents))), element("p", "hint", `${state.positions.filter((position) => position.status !== "archived").length} posizioni attive`));
-  fragment.append(card, positionList(state, render), positionForm(state, render));
+  fragment.append(card, positionList(state, render), positionForm(state, render, null));
   return fragment;
 }
 
@@ -95,13 +95,13 @@ function positionList(state, render) {
     const actions = element("div", "position-actions"); const edit = button("Modifica", `Modifica ${position.name}`, "text-button");
     edit.addEventListener("click", () => { state.editingPositionId = position.id; render(); });
     actions.append(element("strong", "position-value", hidden(state, formatEuro(position.currentValueCents))), edit); row.append(copy, actions); list.append(row);
+    if (state.editingPositionId === position.id) list.append(positionForm(state, render, position));
   }
   return list;
 }
 
-function positionForm(state, render) {
+function positionForm(state, render, editing = null) {
   const form = element("form", "position-form");
-  const editing = state.positions.find((position) => position.id === state.editingPositionId);
   form.append(element("h2", "setting-title", editing ? "Modifica posizione" : "Aggiungi posizione"));
   const type = selectField("Tipo", "type", [["checking", "Conto corrente"], ["deposit", "Conto deposito"], ["etf", "ETF"], ["bond", "Obbligazione"], ["cash", "Contanti"]]);
   const name = inputField("Nome", "name", "text", "es. Conto principale");
@@ -111,7 +111,9 @@ function positionForm(state, render) {
   const error = element("p", "form-error"); error.setAttribute("role", "alert");
   const submit = button(editing ? "Salva modifiche" : "Aggiungi", editing ? "Salva modifiche" : "Aggiungi posizione", "primary-button");
   submit.type = "submit";
-  form.append(type.wrapper, name.wrapper, value.wrapper, capital.wrapper, deposit.wrapper, error, submit);
+  const formActions = element("div", "form-actions");
+  if (editing) { const cancel = button("Annulla", "Annulla modifica", "secondary-button"); cancel.addEventListener("click", () => { state.editingPositionId = null; render(); }); formActions.append(cancel); }
+  formActions.append(submit); form.append(type.wrapper, name.wrapper, value.wrapper, capital.wrapper, deposit.wrapper, error, formActions);
   const updateFields = () => { const investing = ["etf", "bond"].includes(type.input.value); capital.wrapper.hidden = !investing; capital.input.required = investing; deposit.wrapper.hidden = type.input.value !== "deposit"; };
   type.input.addEventListener("change", updateFields);
   if (editing) { type.input.value = editing.type; name.input.value = editing.name; value.input.value = String(editing.currentValueCents / 100).replace(".", ","); capital.input.value = editing.investedCapitalCents == null ? "" : String(editing.investedCapitalCents / 100).replace(".", ","); deposit.input.value = editing.depositType ?? "free"; }
