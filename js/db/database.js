@@ -1,0 +1,70 @@
+import { DB_NAME, DB_VERSION, STORE, createSchema } from "./schema.js";
+
+export class DatabaseError extends Error {
+  constructor(message, cause) { super(message, { cause }); this.name = "DatabaseError"; }
+}
+
+export class CapitaleDatabase {
+  #db;
+
+  static async open({ indexedDB = globalThis.indexedDB } = {}) {
+    if (!indexedDB) throw new DatabaseError("IndexedDB non è disponibile in questo browser.");
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = (event) => {
+      if (event.oldVersion === 0) createSchema(request.result, request.transaction);
+    };
+    const database = await requestToPromise(request, "Impossibile aprire il database locale.");
+    database.onversionchange = () => database.close();
+    return new CapitaleDatabase(database);
+  }
+
+  constructor(database) { this.#db = database; }
+  close() { this.#db.close(); }
+
+  async get(storeName, id) {
+    return this.#run(storeName, "readonly", (store) => requestToPromise(store.get(id), "Lettura locale non riuscita."));
+  }
+
+  async getAll(storeName) {
+    return this.#run(storeName, "readonly", (store) => requestToPromise(store.getAll(), "Lettura locale non riuscita."));
+  }
+
+  async put(storeName, value) {
+    return this.#run(storeName, "readwrite", (store) => requestToPromise(store.put(value), "Salvataggio locale non riuscito."));
+  }
+
+  async delete(storeName, id) {
+    return this.#run(storeName, "readwrite", (store) => requestToPromise(store.delete(id), "Eliminazione locale non riuscita."));
+  }
+
+  async clearAllFinancialData() {
+    return this.#run([STORE.positions, STORE.snapshots, STORE.snapshotItems, STORE.movements], "readwrite", (stores) =>
+      Promise.all(stores.map((store) => requestToPromise(store.clear(), "Pulizia locale non riuscita."))));
+  }
+
+  async #run(storeNames, mode, action) {
+    const names = Array.isArray(storeNames) ? storeNames : [storeNames];
+    let transaction;
+    try { transaction = this.#db.transaction(names, mode); } catch (error) { throw new DatabaseError("Transazione locale non disponibile.", error); }
+    const stores = names.map((name) => transaction.objectStore(name));
+    const completion = transactionDone(transaction);
+    const result = await action(Array.isArray(storeNames) ? stores : stores[0]);
+    await completion;
+    return result;
+  }
+}
+
+function requestToPromise(request, message) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(new DatabaseError(message, request.error));
+  });
+}
+
+function transactionDone(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(new DatabaseError("La transazione locale è stata annullata.", transaction.error));
+    transaction.onerror = () => reject(new DatabaseError("La transazione locale non è riuscita.", transaction.error));
+  });
+}

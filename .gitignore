@@ -1,5 +1,6 @@
 # Logs
 logs
+.DS_Store
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -69,6 +70,11 @@ web_modules/
 .env
 .env.*
 !.env.example
+
+# Dati locali e backup finanziari (mai versionare)
+Capitale_backup_*.json
+*.encrypted.json
+*.csv
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

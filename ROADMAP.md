@@ -8,13 +8,13 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 
 **Obiettivo:** repository ordinata, architettura minima, shell PWA e persistenza affidabile.
 
-- [ ] Ispezionare repository, README, branch e modifiche esistenti; non sovrascrivere il lavoro dell'utente.
-- [ ] Definire struttura moduli, comandi di avvio/test e convenzioni; aggiornare README.
-- [ ] Creare HTML/CSS/JS base, manifest, icone, service worker e risorse locali.
-- [ ] Implementare IndexedDB versionato, store, indici, transazioni, migrazioni e gestione errori.
-- [ ] Implementare funzioni condivise per denaro in centesimi, date civili, validazione e formattazione italiana.
-- [ ] Predisporre categorie iniziali senza dati finanziari dimostrativi.
-- [ ] Testare apertura DB, CRUD di base, reload, migrazione, dati invalidi e calcoli monetari.
+- [x] Ispezionare repository, README, branch e modifiche esistenti; non sovrascrivere il lavoro dell'utente. — 2026-11-27: `main` pulito, remoto `origin` verificato; commit documentazione creato separatamente.
+- [x] Definire struttura moduli, comandi di avvio/test e convenzioni; aggiornare README. — Struttura ES modules e comandi locali documentati.
+- [x] Creare HTML/CSS/JS base, manifest, icone, service worker e risorse locali. — Shell PWA senza dipendenze runtime o CDN.
+- [x] Implementare IndexedDB versionato, store, indici, transazioni, migrazioni e gestione errori. — Schema 1 e migrazione iniziale documentati in `docs/m1-foundations.md`.
+- [x] Implementare funzioni condivise per denaro in centesimi, date civili, validazione e formattazione italiana.
+- [x] Predisporre categorie iniziali senza dati finanziari dimostrativi.
+- [x] Testare apertura DB, CRUD di base, reload, migrazione, dati invalidi e calcoli monetari. — `npm test`: 5 test superati il 2026-11-27; migrazione verificata dal database vuoto a schema 1.
 - [ ] Verificare installabilità tecnica, caricamento da sottopercorso e prima apertura offline dopo cache completata in ambiente di test.
 
 **Gate:** app vuota utilizzabile, database persistente in ambiente di test, test fondamentali superati, nessuna dipendenza runtime da rete. Collaudo iPhone finale in M7.
@@ -132,7 +132,7 @@ Leggere `AGENTS.md` e `SPECIFICATIONS.md` prima di ogni sessione. Lavorare in or
 
 | Milestone | Stato iniziale | Evidenze / note |
 |---|---|---|
-| M1 Fondamenta | Da iniziare | |
+| M1 Fondamenta | In corso | Fondamenta e test unitari completati; resta la verifica offline/installazione con service worker e su iPhone. |
 | M2 Interfaccia | Da iniziare | |
 | M3 Patrimonio | Da iniziare | |
 | M4 Movimenti | Da iniziare | |

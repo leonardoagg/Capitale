@@ -67,11 +67,32 @@ Interfaccia Dark finanziaria, ottimizzata per dispositivi mobili e ispirata all'
 - Separazione tra patrimonio e movimenti mensili.
 - Architettura modulare ed estendibile.
 
+## Sviluppo locale
+
+Capitale è un sito statico, senza backend né dipendenze runtime. Per servirlo in locale è sufficiente un server HTTP, ad esempio:
+
+```bash
+python3 -m http.server 8080
+```
+
+Apri quindi `http://localhost:8080`. L'uso di un server HTTP è necessario per testare correttamente i moduli ES e il service worker; non aprire `index.html` direttamente dal file system.
+
+### Test
+
+La suite automatica usa il test runner incluso in Node.js e una dipendenza di sviluppo per simulare IndexedDB:
+
+```bash
+npm install
+npm test
+```
+
+I test iPhone/Safari, installazione PWA e offline su dispositivo reale restano verifiche manuali da eseguire prima della release, come indicato in `ROADMAP.md`.
+
 ## Stato del progetto
 
-**Versione:** 1.0.0 (in progettazione)
+**Versione obiettivo:** 1.0.0
 
-La progettazione funzionale è completata. Lo sviluppo dell'applicazione deve ancora iniziare.
+La milestone M1 (fondamenta tecniche) è in corso. Nessun dato finanziario dimostrativo viene creato al primo avvio.
 
 ---
 
