@@ -44,3 +44,13 @@ test("sostituisce le righe della fotografia quando la stessa giornata viene aggi
   assert.deepEqual(items.map((item) => item.id), ["new-item"]);
   database.close();
 });
+
+test("cancella posizione e aggiorna atomicamente la fotografia del giorno", async () => {
+  const database = await CapitaleDatabase.open();
+  await database.put(STORE.positions, { id: "delete-position", type: "cash", name: "Da cancellare", status: "active", currentValueCents: 100 });
+  await database.saveWealthSnapshot({ positions: [], snapshot: { id: "delete-snapshot", effectiveDate: "2026-11-27", createdAt: "2026-11-27T10:00:00.000Z" }, snapshotItems: [{ id: "delete-item", snapshotId: "delete-snapshot", positionId: "delete-position", type: "cash", name: "Da cancellare", valueCents: 100 }] });
+  await database.deleteWealthPosition({ positionId: "delete-position", replaceSnapshotId: "delete-snapshot", snapshot: { id: "delete-snapshot", effectiveDate: "2026-11-27", createdAt: "2026-11-27T10:00:00.000Z" }, snapshotItems: [] });
+  assert.equal(await database.get(STORE.positions, "delete-position"), undefined);
+  assert.deepEqual(await database.getAllByIndex(STORE.snapshotItems, "by-snapshot", "delete-snapshot"), []);
+  database.close();
+});

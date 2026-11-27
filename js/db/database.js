@@ -67,6 +67,17 @@ export class CapitaleDatabase {
     }
   }
 
+  async deleteWealthPosition({ positionId, snapshot, snapshotItems, replaceSnapshotId = null }) {
+    const names = [STORE.positions, STORE.snapshots, STORE.snapshotItems];
+    const transaction = this.#db.transaction(names, "readwrite"); const completion = transactionDone(transaction);
+    try {
+      const positionStore = transaction.objectStore(STORE.positions); const snapshotStore = transaction.objectStore(STORE.snapshots); const itemStore = transaction.objectStore(STORE.snapshotItems);
+      const write = () => { positionStore.delete(positionId); snapshotStore.put(snapshot); for (const item of snapshotItems) itemStore.put(item); };
+      if (replaceSnapshotId) { const request = itemStore.index("by-snapshot").openCursor(IDBKeyRange.only(replaceSnapshotId)); request.onsuccess = () => { const cursor = request.result; if (cursor) { cursor.delete(); cursor.continue(); } else write(); }; request.onerror = () => transaction.abort(); } else write();
+      await completion;
+    } catch (error) { try { transaction.abort(); } catch { /* complete */ } throw new DatabaseError("Cancellazione posizione non riuscita.", error); }
+  }
+
   async clearAllFinancialData() {
     return this.#run([STORE.positions, STORE.snapshots, STORE.snapshotItems, STORE.movements], "readwrite", (stores) =>
       Promise.all(stores.map((store) => requestToPromise(store.clear(), "Pulizia locale non riuscita."))));
