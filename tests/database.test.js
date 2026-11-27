@@ -55,6 +55,18 @@ test("cancella posizione e aggiorna atomicamente la fotografia del giorno", asyn
   database.close();
 });
 
+test("archivia una posizione mantenendo lo storico e togliendola dalla fotografia corrente", async () => {
+  const database = await CapitaleDatabase.open();
+  const active = { id: "active-position", type: "cash", name: "Attiva", status: "active", currentValueCents: 100 };
+  const archived = { id: "archived-position", type: "deposit", name: "Archiviata", status: "archived", currentValueCents: 200, archivedAt: "2026-11-27T12:00:00.000Z" };
+  await database.saveWealthSnapshot({ positions: [active], snapshot: { id: "history-snapshot", effectiveDate: "2026-11-26", createdAt: "2026-11-26T12:00:00.000Z" }, snapshotItems: [{ id: "history-item", snapshotId: "history-snapshot", positionId: archived.id, type: archived.type, name: archived.name, valueCents: 200 }] });
+  await database.saveWealthSnapshot({ positions: [archived], snapshot: { id: "current-snapshot", effectiveDate: "2026-11-27", createdAt: "2026-11-27T12:00:00.000Z" }, snapshotItems: [{ id: "current-item", snapshotId: "current-snapshot", positionId: active.id, type: active.type, name: active.name, valueCents: 100 }] });
+  assert.equal((await database.get(STORE.positions, archived.id)).status, "archived");
+  assert.equal((await database.getAllByIndex(STORE.snapshotItems, "by-snapshot", "history-snapshot")).length, 1);
+  assert.deepEqual((await database.getAllByIndex(STORE.snapshotItems, "by-snapshot", "current-snapshot")).map((item) => item.positionId), [active.id]);
+  database.close();
+});
+
 test("cancella tutti i dati e ripristina soltanto le categorie predefinite", async () => {
   const database = await CapitaleDatabase.open();
   await database.put(STORE.movements, { id: "erase-movement", kind: "income", amountCents: 1, categoryId: "income-other", date: "2026-11-27" });

@@ -124,7 +124,7 @@ function positionForm(state, render, editing = null) {
   const submit = button(editing ? "Salva modifiche" : "Aggiungi", editing ? "Salva modifiche" : "Aggiungi posizione", "primary-button");
   submit.type = "submit";
   const formActions = element("div", "form-actions");
-  if (editing) { const cancel = button("Annulla", "Annulla modifica", "secondary-button"); cancel.addEventListener("click", () => { state.editingPositionId = null; render(); }); const remove = button("Cancella conto", "Cancella conto", "delete-button"); remove.addEventListener("click", async () => { if (!window.confirm("Sicuro di voler cancellare?")) return; const now = new Date().toISOString(); const effectiveDate = todayCivilDate(); const remaining = state.positions.filter((item) => item.status !== "archived" && item.id !== editing.id); const existingSnapshot = state.snapshots.filter((item) => item.effectiveDate === effectiveDate).sort((left, right) => `${right.createdAt}${right.id}`.localeCompare(`${left.createdAt}${left.id}`))[0]; const snapshotId = existingSnapshot?.id ?? createId(); await state.database.deleteWealthPosition({ positionId: editing.id, replaceSnapshotId: existingSnapshot?.id ?? null, snapshot: { id: snapshotId, effectiveDate, createdAt: existingSnapshot?.createdAt ?? now, updatedAt: now }, snapshotItems: remaining.map((item) => ({ id: createId(), snapshotId, positionId: item.id, type: item.type, name: item.name, valueCents: item.currentValueCents, investedCapitalCents: item.investedCapitalCents ?? null, depositType: item.depositType ?? null, valuedOn: item.valuedOn })) }); state.editingPositionId = null; await state.refreshPositions(); }); formActions.append(remove, cancel); }
+  if (editing) { const cancel = button("Annulla", "Annulla modifica", "secondary-button"); cancel.addEventListener("click", () => { state.editingPositionId = null; render(); }); const archive = button("Archivia posizione", "Archivia posizione", "secondary-button"); archive.addEventListener("click", async () => { if (!window.confirm("Archiviare questa posizione? Non conterà più nel patrimonio attuale, ma resterà nello storico.")) return; const now = new Date().toISOString(); const effectiveDate = todayCivilDate(); const archived = { ...editing, status: "archived", archivedAt: now, updatedAt: now }; const remaining = state.positions.filter((item) => item.status !== "archived" && item.id !== editing.id); const existingSnapshot = latestSnapshotForDate(state.snapshots, effectiveDate); const snapshotId = existingSnapshot?.id ?? createId(); await state.database.saveWealthSnapshot({ positions: [archived], replaceSnapshotId: existingSnapshot?.id ?? null, snapshot: { id: snapshotId, effectiveDate, createdAt: existingSnapshot?.createdAt ?? now, updatedAt: now }, snapshotItems: snapshotItemsFor(snapshotId, remaining) }); state.editingPositionId = null; await state.refreshPositions(); }); const remove = button("Cancella conto", "Cancella conto", "delete-button"); remove.addEventListener("click", async () => { if (!window.confirm("Sicuro di voler cancellare?")) return; const now = new Date().toISOString(); const effectiveDate = todayCivilDate(); const remaining = state.positions.filter((item) => item.status !== "archived" && item.id !== editing.id); const existingSnapshot = latestSnapshotForDate(state.snapshots, effectiveDate); const snapshotId = existingSnapshot?.id ?? createId(); await state.database.deleteWealthPosition({ positionId: editing.id, replaceSnapshotId: existingSnapshot?.id ?? null, snapshot: { id: snapshotId, effectiveDate, createdAt: existingSnapshot?.createdAt ?? now, updatedAt: now }, snapshotItems: snapshotItemsFor(snapshotId, remaining) }); state.editingPositionId = null; await state.refreshPositions(); }); formActions.append(archive, remove, cancel); }
   formActions.append(submit); form.append(type.wrapper, name.wrapper, value.wrapper, capital.wrapper, deposit.wrapper, error, formActions);
   const updateFields = () => { const investing = ["etf", "bond"].includes(type.input.value); capital.wrapper.hidden = !investing; capital.input.required = investing; deposit.wrapper.hidden = type.input.value !== "deposit"; };
   type.input.addEventListener("change", updateFields);
@@ -142,8 +142,8 @@ function positionForm(state, render, editing = null) {
       if (investing) position.investedCapitalCents = investedCapitalCents;
       assertPosition(position);
       const allActive = [...state.positions.filter((item) => item.status !== "archived" && item.id !== position.id), position];
-      const effectiveDate = todayCivilDate(); const existingSnapshot = state.snapshots.filter((item) => item.effectiveDate === effectiveDate).sort((left, right) => `${right.createdAt}${right.id}`.localeCompare(`${left.createdAt}${left.id}`))[0]; const snapshotId = existingSnapshot?.id ?? createId();
-      await state.database.saveWealthSnapshot({ positions: [position], replaceSnapshotId: existingSnapshot?.id ?? null, snapshot: { id: snapshotId, effectiveDate, createdAt: existingSnapshot?.createdAt ?? now, updatedAt: now }, snapshotItems: allActive.map((item) => ({ id: createId(), snapshotId, positionId: item.id, type: item.type, name: item.name, valueCents: item.currentValueCents, investedCapitalCents: item.investedCapitalCents ?? null, depositType: item.depositType ?? null, valuedOn: item.valuedOn })) });
+      const effectiveDate = todayCivilDate(); const existingSnapshot = latestSnapshotForDate(state.snapshots, effectiveDate); const snapshotId = existingSnapshot?.id ?? createId();
+      await state.database.saveWealthSnapshot({ positions: [position], replaceSnapshotId: existingSnapshot?.id ?? null, snapshot: { id: snapshotId, effectiveDate, createdAt: existingSnapshot?.createdAt ?? now, updatedAt: now }, snapshotItems: snapshotItemsFor(snapshotId, allActive) });
       state.editingPositionId = null; state.addingPosition = false; form.reset(); updateFields(); await state.refreshPositions();
     } catch (exception) { error.textContent = exception.message || "Non è stato possibile salvare la posizione."; submit.disabled = false; }
   });
@@ -228,6 +228,14 @@ function analysisView(state) {
 }
 
 function shortChartDate(civilDate) { return `${civilDate.slice(8, 10)}/${civilDate.slice(5, 7)}`; }
+
+function latestSnapshotForDate(snapshots, effectiveDate) {
+  return snapshots.filter((snapshot) => snapshot.effectiveDate === effectiveDate).sort((left, right) => `${right.createdAt}${right.id}`.localeCompare(`${left.createdAt}${left.id}`))[0];
+}
+
+function snapshotItemsFor(snapshotId, positions) {
+  return positions.map((position) => ({ id: createId(), snapshotId, positionId: position.id, type: position.type, name: position.name, valueCents: position.currentValueCents, investedCapitalCents: position.investedCapitalCents ?? null, depositType: position.depositType ?? null, valuedOn: position.valuedOn }));
+}
 
 function pendingView(title, copy, note) {
   const state = element("section", "empty-state");
